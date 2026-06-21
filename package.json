@@ -1,0 +1,33 @@
+{
+  "name": "narangmandi-server",
+  "version": "1.0.0",
+  "description": "Narang Mandi Urdu City News — Express + Postgres (Neon) API",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "seed": "node src/seed/seed.js",
+    "postinstall": "prisma generate",
+    "test": "node test-e2e.mjs"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^2.5.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1",
+    "express-rate-limit": "^7.4.1",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.1",
+    "slugify": "^1.6.6",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0"
+  }
+}

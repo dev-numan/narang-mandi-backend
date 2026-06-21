@@ -1,0 +1,86 @@
+// Narang Mandi News — Postgres (Neon) schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  admin
+  editor
+}
+
+enum Status {
+  draft
+  published
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         Role      @default(editor)
+  avatar       String    @default("")
+  phone        String    @default("")
+  contactEmail String    @default("")
+  articles     Article[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  description String    @default("")
+  order       Int       @default(0)
+  isActive    Boolean   @default(true)
+  articles    Article[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([order])
+}
+
+model Article {
+  id          String    @id @default(cuid())
+  title       String
+  slug        String    @unique
+  excerpt     String    @default("")
+  content     String    @default("")
+  coverImage  String    @default("")
+  images      String[]  @default([])
+  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryId  String?
+  tags        String[]  @default([])
+  author      User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  authorId    String?
+  status      Status    @default(draft)
+  isCarousel  Boolean   @default(false)
+  views       Int       @default(0)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([categoryId])
+  @@index([status])
+  @@index([isCarousel])
+}
+
+model Settings {
+  id             String   @id @default(cuid())
+  key            String   @unique @default("site")
+  siteName       String   @default("نارنگ منڈی نیوز")
+  logo           String   @default("")
+  tagline        String   @default("آپ کے شہر کی تازہ ترین خبریں")
+  socialLinks    Json     @default("{}")
+  contactEmail   String   @default("")
+  breakingTicker String[] @default([])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
