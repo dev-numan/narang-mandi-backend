@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import prisma from '../lib/prisma.js';
 import { asyncHandler, ApiError } from '../utils/asyncHandler.js';
-import { uniqueSlug } from '../utils/slugify.js';
+import { uniqueShortSlug } from '../utils/slugify.js';
 import {
   serializeArticle,
   CATEGORY_BRIEF,
@@ -223,8 +223,9 @@ export const adminStats = asyncHandler(async (req, res) => {
 
 // POST /api/articles
 export const createArticle = asyncHandler(async (req, res) => {
-  const { category, ...body } = req.body;
-  const slug = await uniqueSlug(prisma.article, body.slug || body.title);
+  const { category, slug: _ignoredSlug, ...body } = req.body;
+  // Auto-generate a short, ASCII link instead of deriving it from the (long) title.
+  const slug = await uniqueShortSlug(prisma.article);
   const article = await prisma.article.create({
     data: {
       ...body,
@@ -246,14 +247,14 @@ export const updateArticle = asyncHandler(async (req, res) => {
     throw new ApiError(403, 'You can only edit your own articles');
   }
 
-  const { category, ...rest } = req.body;
+  const { category, slug: _ignoredSlug, ...rest } = req.body;
   const data = { ...rest };
 
   if (category !== undefined) data.categoryId = category || null;
 
-  if (data.slug && data.slug !== article.slug) {
-    data.slug = await uniqueSlug(prisma.article, data.slug, article.id);
-  }
+  // The slug is a permanent short link — never regenerate it on edit, so
+  // already-shared URLs keep working.
+  delete data.slug;
 
   // Set publishedAt the first time it becomes published.
   if (data.status === 'published' && article.status !== 'published') {
