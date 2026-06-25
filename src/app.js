@@ -15,6 +15,12 @@ import sitemapRoutes from './routes/sitemap.js';
 export function createApp() {
   const app = express();
 
+  // Railway (and most PaaS) put a reverse proxy in front of the app that sets
+  // X-Forwarded-For. Trust exactly one hop so express-rate-limit can read the
+  // real client IP. Use `1`, not `true` — `true` is too permissive and trips
+  // the rate limiter's spoofable-trust-proxy validation error.
+  app.set('trust proxy', 1);
+
   const origins = (process.env.CLIENT_URL || 'http://localhost:5173')
     .split(',')
     .map((s) => s.trim());
