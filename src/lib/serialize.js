@@ -31,6 +31,69 @@ export function serializeSettings(s) {
   return s ? withId(s) : s;
 }
 
+export function serializePlaceCategory(c) {
+  return c ? withId(c) : c;
+}
+
+export function serializePlace(p) {
+  if (!p) return p;
+  const { categoryId, category, ...rest } = p;
+  const out = withId(rest);
+  if (category !== undefined) out.category = category ? serializePlaceCategory(category) : null;
+  return out;
+}
+
+export const PLACE_CATEGORY_BRIEF = { select: { id: true, name: true, slug: true, icon: true } };
+
+export function serializeTrain(t) {
+  return t ? withId(t) : t;
+}
+
+export function serializeClassifiedCategory(c) {
+  return c ? withId(c) : c;
+}
+
+export function serializeClassified(c) {
+  if (!c) return c;
+  const { categoryId, category, ...rest } = c;
+  const out = withId(rest);
+  if (category !== undefined) out.category = category ? serializeClassifiedCategory(category) : null;
+  return out;
+}
+
+export const CLASSIFIED_CATEGORY_BRIEF = { select: { id: true, name: true, slug: true, icon: true } };
+
+export function serializeThread(t) {
+  if (!t) return t;
+  const { _count, ...rest } = t;
+  const out = withId(rest);
+  if (_count) out.messageCount = _count.messages;
+  return out;
+}
+
+// Collapses a message's raw reactions into [{ emoji, count, mine }] using the
+// requesting browser's anonymous clientId.
+export function serializeMessage(m, clientId = '') {
+  if (!m) return m;
+  const { threadId, replyToId, replyTo, reactions, ...rest } = m;
+  const out = withId(rest);
+  if (replyTo !== undefined) {
+    out.replyTo = replyTo
+      ? { _id: replyTo.id, authorName: replyTo.authorName, content: replyTo.content }
+      : null;
+  }
+  if (reactions !== undefined) {
+    const groups = {};
+    for (const r of reactions) {
+      if (!groups[r.emoji]) groups[r.emoji] = { emoji: r.emoji, count: 0, mine: false };
+      groups[r.emoji].count += 1;
+      if (clientId && r.clientId === clientId) groups[r.emoji].mine = true;
+    }
+    out.reactions = Object.values(groups);
+  }
+  return out;
+}
+
 // Standard relation selects reused across queries.
 export const CATEGORY_BRIEF = { select: { id: true, name: true, slug: true } };
 export const AUTHOR_BRIEF = {
