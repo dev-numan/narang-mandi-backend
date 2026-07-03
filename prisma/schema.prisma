@@ -1,4 +1,3 @@
-// Narang Mandi News — Postgres (Neon) schema
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,16 +6,6 @@ datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
-}
-
-enum Role {
-  admin
-  editor
-}
-
-enum Status {
-  draft
-  published
 }
 
 model User {
@@ -28,9 +17,9 @@ model User {
   avatar       String    @default("")
   phone        String    @default("")
   contactEmail String    @default("")
-  articles     Article[]
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+  articles     Article[]
 }
 
 model Category {
@@ -40,9 +29,9 @@ model Category {
   description String    @default("")
   order       Int       @default(0)
   isActive    Boolean   @default(true)
-  articles    Article[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  articles    Article[]
 
   @@index([order])
 }
@@ -55,10 +44,8 @@ model Article {
   content     String    @default("")
   coverImage  String    @default("")
   images      String[]  @default([])
-  category    Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   categoryId  String?
   tags        String[]  @default([])
-  author      User?     @relation(fields: [authorId], references: [id], onDelete: SetNull)
   authorId    String?
   status      Status    @default(draft)
   isCarousel  Boolean   @default(false)
@@ -66,6 +53,8 @@ model Article {
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  author      User?     @relation(fields: [authorId], references: [id])
+  category    Category? @relation(fields: [categoryId], references: [id])
 
   @@index([categoryId])
   @@index([status])
@@ -83,4 +72,169 @@ model Settings {
   breakingTicker String[] @default([])
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+model Classified {
+  id                 String              @id
+  title              String
+  slug               String              @unique
+  description        String              @default("")
+  price              Int?
+  negotiable         Boolean             @default(false)
+  images             String[]            @default([])
+  categoryId         String?
+  location           String              @default("")
+  contactName        String              @default("")
+  phone              String              @default("")
+  isSold             Boolean             @default(false)
+  status             ClassifiedStatus    @default(pending)
+  submittedBy        String              @default("")
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime
+  ClassifiedCategory ClassifiedCategory? @relation(fields: [categoryId], references: [id])
+
+  @@index([categoryId])
+  @@index([status])
+}
+
+model ClassifiedCategory {
+  id         String       @id
+  name       String
+  nameEn     String       @default("")
+  slug       String       @unique
+  icon       String       @default("")
+  order      Int          @default(0)
+  isActive   Boolean      @default(true)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime
+  Classified Classified[]
+
+  @@index([order])
+}
+
+model Message {
+  id            String     @id
+  threadId      String
+  authorName    String     @default("گمنام")
+  clientId      String     @default("")
+  content       String
+  replyToId     String?
+  createdAt     DateTime   @default(now())
+  Message       Message?   @relation("MessageToMessage", fields: [replyToId], references: [id])
+  other_Message Message[]  @relation("MessageToMessage")
+  Thread        Thread     @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  Reaction      Reaction[]
+
+  @@index([replyToId])
+  @@index([threadId])
+}
+
+model Place {
+  id            String         @id
+  name          String
+  slug          String         @unique
+  categoryId    String?
+  address       String         @default("")
+  latitude      Float?
+  longitude     Float?
+  phone         String         @default("")
+  rating        Float?
+  ratingCount   Int?
+  hours         String         @default("")
+  googleMapsUrl String         @default("")
+  status        PlaceStatus    @default(pending)
+  submittedBy   String         @default("")
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime
+  PlaceCategory PlaceCategory? @relation(fields: [categoryId], references: [id])
+
+  @@index([categoryId])
+  @@index([status])
+}
+
+model PlaceCategory {
+  id        String   @id
+  name      String
+  nameEn    String   @default("")
+  slug      String   @unique
+  icon      String   @default("")
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime
+  Place     Place[]
+
+  @@index([order])
+}
+
+model Reaction {
+  id        String   @id
+  messageId String
+  emoji     String
+  clientId  String
+  createdAt DateTime @default(now())
+  Message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, emoji, clientId])
+  @@index([messageId])
+}
+
+model Thread {
+  id             String    @id
+  title          String
+  slug           String    @unique
+  description    String    @default("")
+  authorName     String    @default("گمنام")
+  clientId       String    @default("")
+  isLocked       Boolean   @default(false)
+  lastActivityAt DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime
+  Message        Message[]
+
+  @@index([lastActivityAt])
+}
+
+model Train {
+  id            String   @id
+  name          String
+  nameEn        String   @default("")
+  trainType     String   @default("")
+  upRoute       String   @default("")
+  upNumber      String   @default("")
+  upArrival     String   @default("")
+  upDeparture   String   @default("")
+  downRoute     String   @default("")
+  downNumber    String   @default("")
+  downArrival   String   @default("")
+  downDeparture String   @default("")
+  classes       String   @default("")
+  order         Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime
+
+  @@index([order])
+}
+
+enum Role {
+  admin
+  editor
+}
+
+enum Status {
+  draft
+  published
+}
+
+enum ClassifiedStatus {
+  pending
+  approved
+  rejected
+}
+
+enum PlaceStatus {
+  pending
+  approved
+  rejected
 }
