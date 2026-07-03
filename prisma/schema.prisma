@@ -75,55 +75,55 @@ model Settings {
 }
 
 model Classified {
-  id                 String              @id
-  title              String
-  slug               String              @unique
-  description        String              @default("")
-  price              Int?
-  negotiable         Boolean             @default(false)
-  images             String[]            @default([])
-  categoryId         String?
-  location           String              @default("")
-  contactName        String              @default("")
-  phone              String              @default("")
-  isSold             Boolean             @default(false)
-  status             ClassifiedStatus    @default(pending)
-  submittedBy        String              @default("")
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime
-  ClassifiedCategory ClassifiedCategory? @relation(fields: [categoryId], references: [id])
+  id          String              @id
+  title       String
+  slug        String              @unique
+  description String              @default("")
+  price       Int?
+  negotiable  Boolean             @default(false)
+  images      String[]            @default([])
+  categoryId  String?
+  location    String              @default("")
+  contactName String              @default("")
+  phone       String              @default("")
+  isSold      Boolean             @default(false)
+  status      ClassifiedStatus    @default(pending)
+  submittedBy String              @default("")
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime
+  category    ClassifiedCategory? @relation(fields: [categoryId], references: [id])
 
   @@index([categoryId])
   @@index([status])
 }
 
 model ClassifiedCategory {
-  id         String       @id
-  name       String
-  nameEn     String       @default("")
-  slug       String       @unique
-  icon       String       @default("")
-  order      Int          @default(0)
-  isActive   Boolean      @default(true)
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime
-  Classified Classified[]
+  id          String       @id
+  name        String
+  nameEn      String       @default("")
+  slug        String       @unique
+  icon        String       @default("")
+  order       Int          @default(0)
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime
+  classifieds Classified[]
 
   @@index([order])
 }
 
 model Message {
-  id            String     @id
-  threadId      String
-  authorName    String     @default("گمنام")
-  clientId      String     @default("")
-  content       String
-  replyToId     String?
-  createdAt     DateTime   @default(now())
-  Message       Message?   @relation("MessageToMessage", fields: [replyToId], references: [id])
-  other_Message Message[]  @relation("MessageToMessage")
-  Thread        Thread     @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  Reaction      Reaction[]
+  id         String     @id
+  threadId   String
+  authorName String     @default("گمنام")
+  clientId   String     @default("")
+  content    String
+  replyToId  String?
+  createdAt  DateTime   @default(now())
+  replyTo    Message?   @relation("MessageToMessage", fields: [replyToId], references: [id])
+  replies    Message[]  @relation("MessageToMessage")
+  thread     Thread     @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  reactions  Reaction[]
 
   @@index([replyToId])
   @@index([threadId])
@@ -146,7 +146,7 @@ model Place {
   submittedBy   String         @default("")
   createdAt     DateTime       @default(now())
   updatedAt     DateTime
-  PlaceCategory PlaceCategory? @relation(fields: [categoryId], references: [id])
+  category      PlaceCategory? @relation(fields: [categoryId], references: [id])
 
   @@index([categoryId])
   @@index([status])
@@ -162,7 +162,7 @@ model PlaceCategory {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime
-  Place     Place[]
+  places    Place[]
 
   @@index([order])
 }
@@ -173,7 +173,7 @@ model Reaction {
   emoji     String
   clientId  String
   createdAt DateTime @default(now())
-  Message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@unique([messageId, emoji, clientId])
   @@index([messageId])
@@ -190,7 +190,7 @@ model Thread {
   lastActivityAt DateTime  @default(now())
   createdAt      DateTime  @default(now())
   updatedAt      DateTime
-  Message        Message[]
+  messages       Message[]
 
   @@index([lastActivityAt])
 }
