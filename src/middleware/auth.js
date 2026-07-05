@@ -33,3 +33,11 @@ export function requireRole(...roles) {
     next();
   };
 }
+
+// Category management is allowed for admins, or editors an admin has explicitly
+// granted the `canManageCategories` permission.
+export function requireCategoryManage(req, res, next) {
+  const u = req.user;
+  if (u && (u.role === 'admin' || u.canManageCategories)) return next();
+  return next(new ApiError(403, 'You do not have permission to manage categories'));
+}

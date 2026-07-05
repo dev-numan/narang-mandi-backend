@@ -55,9 +55,14 @@ const router = Router();
 
 router.use(requireAuth);
 
+// Articles + stats: available to editors (scoped to their own) and admins.
 router.get('/stats', adminStats);
 router.get('/articles', adminListArticles);
 router.get('/articles/:id', adminGetArticle);
+
+// Everything below is admin-only. Editors get articles-related access only —
+// Places, Community, Trains, Classifieds and user management are off-limits.
+router.use(requireRole('admin'));
 
 // User management — admin role only
 router.get('/users', requireRole('admin'), listUsers);

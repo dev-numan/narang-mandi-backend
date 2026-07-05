@@ -9,12 +9,14 @@ export const createUserSchema = z.object({
   email: z.string().email(),
   password: z.string().min(6),
   role: z.enum(['admin', 'editor']).optional().default('editor'),
+  canManageCategories: z.boolean().optional().default(false),
 });
 
 export const updateUserSchema = z.object({
   name: z.string().min(1).optional(),
   role: z.enum(['admin', 'editor']).optional(),
   password: z.string().min(6).optional(),
+  canManageCategories: z.boolean().optional(),
 });
 
 export const listUsers = asyncHandler(async (req, res) => {
@@ -31,6 +33,7 @@ export const createUser = asyncHandler(async (req, res) => {
       name: req.body.name,
       email,
       role: req.body.role,
+      canManageCategories: req.body.role === 'admin' ? true : !!req.body.canManageCategories,
       passwordHash: await hashPassword(req.body.password),
     },
   });
@@ -44,6 +47,11 @@ export const updateUser = asyncHandler(async (req, res) => {
   if (req.body.name) data.name = req.body.name;
   if (req.body.role) data.role = req.body.role;
   if (req.body.password) data.passwordHash = await hashPassword(req.body.password);
+  if (req.body.canManageCategories !== undefined) {
+    data.canManageCategories = req.body.canManageCategories;
+  }
+  // Admins always implicitly have full category access.
+  if (req.body.role === 'admin') data.canManageCategories = true;
   const updated = await prisma.user.update({ where: { id: user.id }, data });
   res.json({ success: true, data: serializeUser(updated), message: 'User updated' });
 });
