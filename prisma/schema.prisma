@@ -65,7 +65,7 @@ model Article {
 model Settings {
   id             String   @id @default(cuid())
   key            String   @unique @default("site")
-  siteName       String   @default("نارنگ منڈی نیوز")
+  siteName       String   @default("Narang Mandi")
   logo           String   @default("")
   tagline        String   @default("آپ کے شہر کی تازہ ترین خبریں")
   socialLinks    Json     @default("{}")

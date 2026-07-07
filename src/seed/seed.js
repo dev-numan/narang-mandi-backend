@@ -104,7 +104,7 @@ async function run() {
   await prisma.settings.create({
     data: {
       key: 'site',
-      siteName: 'نارنگ منڈی نیوز',
+      siteName: 'Narang Mandi',
       tagline: 'آپ کے شہر کی تازہ ترین خبریں',
       contactEmail: 'info@narangmandi.com',
       socialLinks: {

@@ -21,11 +21,18 @@ export const settingsSchema = z.object({
 
 // Single settings row keyed by "site".
 async function getSingleton() {
-  return prisma.settings.upsert({
+  let settings = await prisma.settings.upsert({
     where: { key: 'site' },
     update: {},
-    create: { key: 'site' },
+    create: { key: 'site', siteName: 'Narang Mandi' },
   });
+  if (settings.siteName !== 'Narang Mandi') {
+    settings = await prisma.settings.update({
+      where: { key: 'site' },
+      data: { siteName: 'Narang Mandi' },
+    });
+  }
+  return settings;
 }
 
 export const getSettings = asyncHandler(async (req, res) => {
@@ -43,6 +50,10 @@ export const updateSettings = asyncHandler(async (req, res) => {
   }
   if (data.socialLinks) {
     data.socialLinks = { ...(current.socialLinks || {}), ...data.socialLinks };
+  }
+  // Brand name is fixed; ignore any custom value from the admin form.
+  if (req.user.role === 'admin') {
+    data.siteName = 'Narang Mandi';
   }
   const updated = await prisma.settings.update({ where: { key: 'site' }, data });
   res.json({ success: true, data: serializeSettings(updated), message: 'Settings updated' });

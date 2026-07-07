@@ -28,7 +28,8 @@ export function serializeArticle(a) {
 }
 
 export function serializeSettings(s) {
-  return s ? withId(s) : s;
+  if (!s) return s;
+  return { ...withId(s), siteName: 'Narang Mandi' };
 }
 
 export function serializePlaceCategory(c) {
