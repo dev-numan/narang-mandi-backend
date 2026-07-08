@@ -20,16 +20,24 @@ export const settingsSchema = z.object({
 });
 
 // Single settings row keyed by "site".
+const WHATSAPP_URL = 'https://wa.me/923069761224';
+
 async function getSingleton() {
   let settings = await prisma.settings.upsert({
     where: { key: 'site' },
     update: {},
     create: { key: 'site', siteName: 'Narang Mandi' },
   });
-  if (settings.siteName !== 'Narang Mandi') {
+  const updates = {};
+  if (settings.siteName !== 'Narang Mandi') updates.siteName = 'Narang Mandi';
+  const links = settings.socialLinks || {};
+  if (!links.whatsapp || links.whatsapp.includes('0000000000')) {
+    updates.socialLinks = { ...links, whatsapp: WHATSAPP_URL };
+  }
+  if (Object.keys(updates).length > 0) {
     settings = await prisma.settings.update({
       where: { key: 'site' },
-      data: { siteName: 'Narang Mandi' },
+      data: updates,
     });
   }
   return settings;

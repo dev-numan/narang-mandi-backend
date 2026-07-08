@@ -111,7 +111,7 @@ async function run() {
         facebook: 'https://facebook.com',
         youtube: 'https://youtube.com',
         twitter: 'https://twitter.com',
-        whatsapp: 'https://wa.me/0000000000',
+        whatsapp: 'https://wa.me/923069761224',
       },
       breakingTicker: ['نارنگ منڈی نیوز پر خوش آمدید — تازہ ترین خبروں کے لیے ساتھ رہیں'],
     },

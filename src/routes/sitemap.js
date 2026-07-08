@@ -16,6 +16,10 @@ router.get('/sitemap.xml', async (req, res) => {
     { loc: `${site}/about`, priority: '0.3' },
     { loc: `${site}/contact`, priority: '0.3' },
     { loc: `${site}/privacy`, priority: '0.3' },
+    { loc: `${site}/places`, priority: '0.5' },
+    { loc: `${site}/trains`, priority: '0.5' },
+    { loc: `${site}/classifieds`, priority: '0.5' },
+    { loc: `${site}/community`, priority: '0.5' },
     ...categories.map((c) => ({ loc: `${site}/category/${c.slug}`, priority: '0.6' })),
     ...articles.map((a) => ({
       loc: `${site}/article/${a.slug}`,
