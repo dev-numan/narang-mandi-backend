@@ -76,7 +76,7 @@ model Settings {
 }
 
 model Classified {
-  id          String              @id
+  id          String              @id @default(cuid())
   title       String
   slug        String              @unique
   description String              @default("")
@@ -88,10 +88,11 @@ model Classified {
   contactName String              @default("")
   phone       String              @default("")
   isSold      Boolean             @default(false)
+  saleCode    String?             @unique
   status      ClassifiedStatus    @default(pending)
   submittedBy String              @default("")
   createdAt   DateTime            @default(now())
-  updatedAt   DateTime
+  updatedAt   DateTime            @updatedAt
   category    ClassifiedCategory? @relation(fields: [categoryId], references: [id])
 
   @@index([categoryId])
@@ -99,7 +100,7 @@ model Classified {
 }
 
 model ClassifiedCategory {
-  id          String       @id
+  id          String       @id @default(cuid())
   name        String
   nameEn      String       @default("")
   slug        String       @unique
@@ -107,14 +108,14 @@ model ClassifiedCategory {
   order       Int          @default(0)
   isActive    Boolean      @default(true)
   createdAt   DateTime     @default(now())
-  updatedAt   DateTime
+  updatedAt   DateTime     @updatedAt
   classifieds Classified[]
 
   @@index([order])
 }
 
 model Message {
-  id         String     @id
+  id         String     @id @default(cuid())
   threadId   String
   authorName String     @default("گمنام")
   clientId   String     @default("")
@@ -131,7 +132,7 @@ model Message {
 }
 
 model Place {
-  id            String         @id
+  id            String         @id @default(cuid())
   name          String
   slug          String         @unique
   categoryId    String?
@@ -146,7 +147,7 @@ model Place {
   status        PlaceStatus    @default(pending)
   submittedBy   String         @default("")
   createdAt     DateTime       @default(now())
-  updatedAt     DateTime
+  updatedAt     DateTime       @updatedAt
   category      PlaceCategory? @relation(fields: [categoryId], references: [id])
 
   @@index([categoryId])
@@ -154,7 +155,7 @@ model Place {
 }
 
 model PlaceCategory {
-  id        String   @id
+  id        String   @id @default(cuid())
   name      String
   nameEn    String   @default("")
   slug      String   @unique
@@ -162,14 +163,14 @@ model PlaceCategory {
   order     Int      @default(0)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
-  updatedAt DateTime
+  updatedAt DateTime @updatedAt
   places    Place[]
 
   @@index([order])
 }
 
 model Reaction {
-  id        String   @id
+  id        String   @id @default(cuid())
   messageId String
   emoji     String
   clientId  String
@@ -181,7 +182,7 @@ model Reaction {
 }
 
 model Thread {
-  id             String    @id
+  id             String    @id @default(cuid())
   title          String
   slug           String    @unique
   description    String    @default("")
@@ -190,14 +191,14 @@ model Thread {
   isLocked       Boolean   @default(false)
   lastActivityAt DateTime  @default(now())
   createdAt      DateTime  @default(now())
-  updatedAt      DateTime
+  updatedAt      DateTime  @updatedAt
   messages       Message[]
 
   @@index([lastActivityAt])
 }
 
 model Train {
-  id            String   @id
+  id            String   @id @default(cuid())
   name          String
   nameEn        String   @default("")
   trainType     String   @default("")
@@ -213,7 +214,7 @@ model Train {
   order         Int      @default(0)
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
-  updatedAt     DateTime
+  updatedAt     DateTime @updatedAt
 
   @@index([order])
 }

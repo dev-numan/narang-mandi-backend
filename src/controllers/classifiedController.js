@@ -8,6 +8,22 @@ import {
   CLASSIFIED_CATEGORY_BRIEF,
 } from '../lib/serialize.js';
 
+async function generateSaleCode() {
+  for (let attempt = 0; attempt < 25; attempt++) {
+    const saleCode = String(Math.floor(10000000 + Math.random() * 90000000));
+    const exists = await prisma.classified.findUnique({ where: { saleCode } });
+    if (!exists) return saleCode;
+  }
+  throw new ApiError(500, 'Could not generate sale code');
+}
+
+// Compare phones regardless of +92 / 0 prefix formatting.
+function normalizePhone(phone = '') {
+  const digits = String(phone).replace(/\D/g, '');
+  if (digits.length >= 10) return digits.slice(-10);
+  return digits;
+}
+
 // ---------- Classified Categories ----------
 
 export const classifiedCategorySchema = z.object({
@@ -85,6 +101,11 @@ export const classifiedSubmitSchema = z.object({
   submittedBy: z.string().max(60).optional().default(''),
 });
 
+export const markSoldSchema = z.object({
+  saleCode: z.string().regex(/^\d{6,8}$/, 'Valid sale code required'),
+  phone: z.string().min(7).max(40),
+});
+
 // Admin create/update — everything editable.
 export const classifiedAdminSchema = z.object({
   title: z.string().min(1),
@@ -137,14 +158,43 @@ export const submitClassified = asyncHandler(async (req, res) => {
   const exists = await prisma.classifiedCategory.findUnique({ where: { id: req.body.categoryId } });
   if (!exists) throw new ApiError(400, 'Invalid category');
   const slug = await uniqueSlug(prisma.classified, req.body.title);
+  const saleCode = await generateSaleCode();
   const listing = await prisma.classified.create({
-    data: { ...req.body, slug, status: 'pending' },
+    data: { ...req.body, slug, saleCode, status: 'pending' },
     include: { category: CLASSIFIED_CATEGORY_BRIEF },
   });
   res.status(201).json({
     success: true,
-    data: serializeClassified(listing),
+    data: serializeClassified(listing, { includeSaleCode: true }),
     message: 'شکریہ! آپ کا اشتہار موصول ہو گیا ہے اور منظوری کے بعد شائع کر دیا جائے گا۔',
+  });
+});
+
+// POST /api/classifieds/mark-sold — owner marks listing sold with code + phone.
+export const markSoldByCode = asyncHandler(async (req, res) => {
+  const listing = await prisma.classified.findUnique({
+    where: { saleCode: req.body.saleCode },
+    include: { category: CLASSIFIED_CATEGORY_BRIEF },
+  });
+  const invalidMsg = 'غلط کوڈ یا فون نمبر — دوبارہ کوشش کریں';
+  if (!listing || listing.status !== 'approved') {
+    throw new ApiError(404, invalidMsg);
+  }
+  if (normalizePhone(listing.phone) !== normalizePhone(req.body.phone)) {
+    throw new ApiError(404, invalidMsg);
+  }
+  if (listing.isSold) {
+    throw new ApiError(400, 'یہ اشتہار پہلے ہی فروخت شدہ قرار دیا جا چکا ہے');
+  }
+  const updated = await prisma.classified.update({
+    where: { id: listing.id },
+    data: { isSold: true },
+    include: { category: CLASSIFIED_CATEGORY_BRIEF },
+  });
+  res.json({
+    success: true,
+    data: serializeClassified(updated),
+    message: 'مبارک ہو! آپ کی چیز فروخت شدہ قرار دے دی گئی ہے۔',
   });
 });
 
@@ -159,16 +209,17 @@ export const adminListClassifieds = asyncHandler(async (req, res) => {
     include: { category: CLASSIFIED_CATEGORY_BRIEF },
     orderBy: [{ createdAt: 'desc' }],
   });
-  res.json({ success: true, data: listings.map(serializeClassified) });
+  res.json({ success: true, data: listings.map((l) => serializeClassified(l, { includeSaleCode: true })) });
 });
 
 export const createClassified = asyncHandler(async (req, res) => {
   const slug = await uniqueSlug(prisma.classified, req.body.slug || req.body.title);
+  const saleCode = await generateSaleCode();
   const listing = await prisma.classified.create({
-    data: { status: 'approved', ...req.body, slug },
+    data: { status: 'approved', ...req.body, slug, saleCode },
     include: { category: CLASSIFIED_CATEGORY_BRIEF },
   });
-  res.status(201).json({ success: true, data: serializeClassified(listing), message: 'Listing created' });
+  res.status(201).json({ success: true, data: serializeClassified(listing, { includeSaleCode: true }), message: 'Listing created' });
 });
 
 export const updateClassified = asyncHandler(async (req, res) => {
@@ -194,12 +245,16 @@ export const setClassifiedStatus = asyncHandler(async (req, res) => {
   }
   const listing = await prisma.classified.findUnique({ where: { id: req.params.id } });
   if (!listing) throw new ApiError(404, 'Listing not found');
+  const data = { status };
+  if (status === 'approved' && !listing.saleCode) {
+    data.saleCode = await generateSaleCode();
+  }
   const updated = await prisma.classified.update({
     where: { id: listing.id },
-    data: { status },
+    data,
     include: { category: CLASSIFIED_CATEGORY_BRIEF },
   });
-  res.json({ success: true, data: serializeClassified(updated), message: `Listing ${status}` });
+  res.json({ success: true, data: serializeClassified(updated, { includeSaleCode: true }), message: `Listing ${status}` });
 });
 
 export const deleteClassified = asyncHandler(async (req, res) => {

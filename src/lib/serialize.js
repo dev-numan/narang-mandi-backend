@@ -54,10 +54,11 @@ export function serializeClassifiedCategory(c) {
   return c ? withId(c) : c;
 }
 
-export function serializeClassified(c) {
+export function serializeClassified(c, { includeSaleCode = false } = {}) {
   if (!c) return c;
-  const { categoryId, category, ...rest } = c;
+  const { categoryId, category, saleCode, ...rest } = c;
   const out = withId(rest);
+  if (includeSaleCode && saleCode) out.saleCode = saleCode;
   if (category !== undefined) out.category = category ? serializeClassifiedCategory(category) : null;
   return out;
 }

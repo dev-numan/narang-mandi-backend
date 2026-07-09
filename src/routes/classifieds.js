@@ -4,8 +4,10 @@ import {
   listClassifieds,
   getClassified,
   submitClassified,
+  markSoldByCode,
   listClassifiedCategories,
   classifiedSubmitSchema,
+  markSoldSchema,
 } from '../controllers/classifiedController.js';
 import { uploadImage } from '../controllers/uploadController.js';
 import { upload } from '../middleware/upload.js';
@@ -29,9 +31,17 @@ const uploadLimiter = rateLimit({
   legacyHeaders: false,
   message: { success: false, message: 'بہت زیادہ تصاویر، براہِ کرم تھوڑی دیر بعد کوشش کریں' },
 });
+const markSoldLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'بہت زیادہ کوششیں، براہِ کرم تھوڑی دیر بعد کوشش کریں' },
+});
 
 router.get('/', listClassifieds);
 router.get('/categories', listClassifiedCategories); // before /:slug
+router.post('/mark-sold', markSoldLimiter, validate(markSoldSchema), markSoldByCode);
 router.get('/:slug', getClassified);
 router.post('/', writeLimiter, validate(classifiedSubmitSchema), submitClassified);
 // Public, rate-limited image upload for ad photos (the /api/upload route is auth-only).
