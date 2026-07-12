@@ -21,6 +21,7 @@ model User {
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   articles            Article[]
+  shops               Shop[]
 }
 
 model Category {
@@ -219,9 +220,113 @@ model Train {
   @@index([order])
 }
 
+// ---------- Dukanen (shops / e-commerce) ----------
+
+model Shop {
+  id          String         @id @default(cuid())
+  name        String
+  slug        String         @unique
+  description String         @default("")
+  logo        String         @default("")
+  coverImage  String         @default("")
+  phone       String         @default("")
+  whatsapp    String         @default("")
+  address     String         @default("")
+  ownerId     String
+  isActive    Boolean        @default(true)
+  order       Int            @default(0)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  owner       User           @relation(fields: [ownerId], references: [id])
+  categories  ShopCategory[]
+  products    Product[]
+  orders      Order[]
+
+  @@index([ownerId])
+  @@index([isActive])
+}
+
+model ShopCategory {
+  id        String    @id @default(cuid())
+  shopId    String
+  name      String
+  nameEn    String    @default("")
+  slug      String    @unique
+  order     Int       @default(0)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  shop      Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  products  Product[]
+
+  @@index([shopId])
+}
+
+model Product {
+  id          String        @id @default(cuid())
+  shopId      String
+  categoryId  String?
+  name        String
+  slug        String        @unique
+  description String        @default("")
+  price       Int           @default(0)
+  stock       Int           @default(0)
+  images      String[]      @default([])
+  isActive    Boolean       @default(true)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  shop        Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  category    ShopCategory? @relation(fields: [categoryId], references: [id])
+  orderItems  OrderItem[]
+
+  @@index([shopId])
+  @@index([categoryId])
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  orderNumber   String      @unique
+  shopId        String
+  customerName  String
+  customerPhone String
+  address       String      @default("")
+  note          String      @default("")
+  total         Int         @default(0)
+  status        OrderStatus @default(pending)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  shop          Shop        @relation(fields: [shopId], references: [id])
+  items         OrderItem[]
+
+  @@index([shopId])
+  @@index([status])
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  productId   String?
+  productName String
+  unitPrice   Int
+  quantity    Int
+  lineTotal   Int
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product? @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+}
+
 enum Role {
   admin
   editor
+  shopkeeper
+}
+
+enum OrderStatus {
+  pending
+  processing
+  fulfilled
+  cancelled
 }
 
 enum Status {

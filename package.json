@@ -13,6 +13,7 @@
     "seed:places": "node src/scripts/seed-places.js",
     "seed:trains": "node src/scripts/seed-trains.js",
     "seed:classifieds": "node src/scripts/seed-classified-categories.js",
+    "seed:shops": "node src/scripts/seed-shops.js",
     "postinstall": "prisma generate",
     "test": "node test-e2e.mjs"
   },

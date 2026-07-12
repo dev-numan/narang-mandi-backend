@@ -96,6 +96,60 @@ export function serializeMessage(m, clientId = '') {
   return out;
 }
 
+// ---------- Dukanen (shops) ----------
+
+export const SHOP_BRIEF = {
+  select: { id: true, name: true, slug: true, logo: true, phone: true, whatsapp: true },
+};
+export const SHOP_CATEGORY_BRIEF = { select: { id: true, name: true, nameEn: true, slug: true } };
+
+export function serializeShop(s) {
+  if (!s) return s;
+  const { ownerId, owner, categories, products, orders, _count, ...rest } = s;
+  const out = withId(rest);
+  if (owner !== undefined) out.owner = owner ? serializeUser(owner) : null;
+  if (categories !== undefined) out.categories = categories.map(serializeShopCategory);
+  if (products !== undefined) out.products = products.map(serializeProduct);
+  if (_count) {
+    if (_count.products !== undefined) out.productCount = _count.products;
+    if (_count.orders !== undefined) out.orderCount = _count.orders;
+  }
+  return out;
+}
+
+export function serializeShopCategory(c) {
+  if (!c) return c;
+  const { shopId, _count, ...rest } = c;
+  const out = withId(rest);
+  if (_count && _count.products !== undefined) out.productCount = _count.products;
+  return out;
+}
+
+export function serializeProduct(p) {
+  if (!p) return p;
+  const { categoryId, category, shopId, shop, orderItems, ...rest } = p;
+  const out = withId(rest);
+  if (category !== undefined) out.category = category ? serializeShopCategory(category) : null;
+  if (shop !== undefined) out.shop = shop ? serializeShop(shop) : null;
+  return out;
+}
+
+export function serializeOrder(o) {
+  if (!o) return o;
+  const { shopId, shop, items, ...rest } = o;
+  const out = withId(rest);
+  if (shop !== undefined) out.shop = shop ? serializeShop(shop) : null;
+  if (items !== undefined) {
+    out.items = items.map((it) => {
+      const { orderId, productId, product, ...irest } = it;
+      const io = withId(irest);
+      if (product !== undefined) io.product = product ? serializeProduct(product) : null;
+      return io;
+    });
+  }
+  return out;
+}
+
 // Standard relation selects reused across queries.
 export const CATEGORY_BRIEF = { select: { id: true, name: true, slug: true } };
 export const AUTHOR_BRIEF = {

@@ -13,6 +13,8 @@ import placeRoutes from './routes/places.js';
 import communityRoutes from './routes/community.js';
 import trainRoutes from './routes/trains.js';
 import classifiedRoutes from './routes/classifieds.js';
+import shopRoutes from './routes/shops.js';
+import shopAdminRoutes from './routes/shopAdmin.js';
 import adminRoutes from './routes/admin.js';
 import sitemapRoutes from './routes/sitemap.js';
 
@@ -54,6 +56,8 @@ export function createApp() {
   app.use('/api/community', communityRoutes);
   app.use('/api/trains', trainRoutes);
   app.use('/api/classifieds', classifiedRoutes);
+  app.use('/api/shops', shopRoutes);
+  app.use('/api/shop-admin', shopAdminRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/', sitemapRoutes);
 

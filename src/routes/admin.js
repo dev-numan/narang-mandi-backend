@@ -48,6 +48,15 @@ import {
   classifiedAdminSchema,
   classifiedCategorySchema,
 } from '../controllers/classifiedController.js';
+import {
+  adminListShops,
+  adminCreateShop,
+  adminUpdateShop,
+  adminSetShopStatus,
+  adminDeleteShop,
+  createShopSchema,
+  adminUpdateShopSchema,
+} from '../controllers/shopController.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 
@@ -102,5 +111,12 @@ router.delete('/classifieds/:id', deleteClassified);
 router.post('/classified-categories', validate(classifiedCategorySchema), createClassifiedCategory);
 router.put('/classified-categories/:id', validate(classifiedCategorySchema.partial()), updateClassifiedCategory);
 router.delete('/classified-categories/:id', deleteClassifiedCategory);
+
+// Shops (Dukanen) — create shopkeeper account + shop, manage & moderate
+router.get('/shops', adminListShops);
+router.post('/shops', validate(createShopSchema), adminCreateShop);
+router.put('/shops/:id', validate(adminUpdateShopSchema), adminUpdateShop);
+router.patch('/shops/:id/status', adminSetShopStatus);
+router.delete('/shops/:id', adminDeleteShop);
 
 export default router;
