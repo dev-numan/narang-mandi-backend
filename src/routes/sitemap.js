@@ -3,29 +3,53 @@ import prisma from '../lib/prisma.js';
 
 const router = Router();
 
-// GET /sitemap.xml — dynamic sitemap of public URLs.
+function siteBase() {
+  const raw = process.env.PUBLIC_SITE_URL || process.env.CLIENT_URL || 'http://localhost:5173';
+  return raw.split(',')[0].trim().replace(/\/$/, '');
+}
+
+function xmlEscape(s = '') {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+// GET /sitemap.xml — all public URLs (news, sections, shops, products, listings).
 router.get('/sitemap.xml', async (req, res) => {
-  const site = (process.env.CLIENT_URL || 'http://localhost:5173').split(',')[0].trim();
-  const [articles, categories] = await Promise.all([
+  const site = siteBase();
+  const [articles, categories, shops, products, classifieds] = await Promise.all([
     prisma.article.findMany({ where: { status: 'published' }, select: { slug: true, updatedAt: true } }),
     prisma.category.findMany({ where: { isActive: true }, select: { slug: true } }),
+    prisma.shop.findMany({ where: { isActive: true }, select: { slug: true, updatedAt: true } }),
+    prisma.product.findMany({
+      where: { isActive: true, shop: { isActive: true } },
+      select: { slug: true, updatedAt: true, shop: { select: { slug: true } } },
+    }),
+    prisma.classified.findMany({ where: { status: 'approved' }, select: { slug: true, updatedAt: true } }),
   ]);
+
+  const iso = (d) => (d ? new Date(d).toISOString() : undefined);
 
   const urls = [
     { loc: `${site}/`, priority: '1.0' },
+    { loc: `${site}/shops`, priority: '0.7' },
+    { loc: `${site}/classifieds`, priority: '0.5' },
+    { loc: `${site}/places`, priority: '0.5' },
+    { loc: `${site}/trains`, priority: '0.5' },
+    { loc: `${site}/community`, priority: '0.5' },
     { loc: `${site}/about`, priority: '0.3' },
     { loc: `${site}/contact`, priority: '0.3' },
     { loc: `${site}/privacy`, priority: '0.3' },
-    { loc: `${site}/places`, priority: '0.5' },
-    { loc: `${site}/trains`, priority: '0.5' },
-    { loc: `${site}/classifieds`, priority: '0.5' },
-    { loc: `${site}/community`, priority: '0.5' },
     ...categories.map((c) => ({ loc: `${site}/category/${c.slug}`, priority: '0.6' })),
-    ...articles.map((a) => ({
-      loc: `${site}/article/${a.slug}`,
-      lastmod: a.updatedAt?.toISOString(),
-      priority: '0.8',
-    })),
+    ...articles.map((a) => ({ loc: `${site}/article/${a.slug}`, lastmod: iso(a.updatedAt), priority: '0.8' })),
+    ...shops.map((s) => ({ loc: `${site}/shops/${s.slug}`, lastmod: iso(s.updatedAt), priority: '0.6' })),
+    ...products
+      .filter((p) => p.shop?.slug)
+      .map((p) => ({ loc: `${site}/shops/${p.shop.slug}/product/${p.slug}`, lastmod: iso(p.updatedAt), priority: '0.5' })),
+    ...classifieds.map((c) => ({ loc: `${site}/classifieds/${c.slug}`, lastmod: iso(c.updatedAt), priority: '0.4' })),
   ];
 
   const xml =
@@ -34,9 +58,38 @@ router.get('/sitemap.xml', async (req, res) => {
     urls
       .map(
         (u) =>
-          `  <url><loc>${u.loc}</loc>${
-            u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ''
-          }<priority>${u.priority}</priority></url>`
+          `  <url><loc>${xmlEscape(u.loc)}</loc>${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ''}<priority>${u.priority}</priority></url>`
+      )
+      .join('\n') +
+    '\n</urlset>';
+
+  res.header('Content-Type', 'application/xml').send(xml);
+});
+
+// GET /news-sitemap.xml — Google News sitemap: articles from the last 2 days.
+router.get('/news-sitemap.xml', async (req, res) => {
+  const site = siteBase();
+  const publicationName = process.env.NEWS_PUBLICATION_NAME || 'Narang Mandi';
+  const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+
+  const articles = await prisma.article.findMany({
+    where: { status: 'published', publishedAt: { gte: twoDaysAgo } },
+    select: { slug: true, title: true, publishedAt: true },
+    orderBy: { publishedAt: 'desc' },
+    take: 1000,
+  });
+
+  const xml =
+    '<?xml version="1.0" encoding="UTF-8"?>\n' +
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">\n' +
+    articles
+      .map(
+        (a) =>
+          `  <url><loc>${xmlEscape(`${site}/article/${a.slug}`)}</loc>` +
+          `<news:news><news:publication><news:name>${xmlEscape(publicationName)}</news:name>` +
+          `<news:language>ur</news:language></news:publication>` +
+          `<news:publication_date>${new Date(a.publishedAt).toISOString()}</news:publication_date>` +
+          `<news:title>${xmlEscape(a.title)}</news:title></news:news></url>`
       )
       .join('\n') +
     '\n</urlset>';

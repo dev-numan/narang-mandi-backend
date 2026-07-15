@@ -3,6 +3,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { UPLOAD_DIR } from './middleware/upload.js';
 import { notFound, errorHandler } from './middleware/error.js';
+import { attachSpa } from './middleware/spa.js';
 
 import authRoutes from './routes/auth.js';
 import articleRoutes from './routes/articles.js';
@@ -60,6 +61,9 @@ export function createApp() {
   app.use('/api/shop-admin', shopAdminRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/', sitemapRoutes);
+
+  // Serve the built SPA with per-route SEO meta (no-op in dev / when no build).
+  attachSpa(app);
 
   app.use(notFound);
   app.use(errorHandler);
