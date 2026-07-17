@@ -234,6 +234,7 @@ model Shop {
   address     String         @default("")
   ownerId     String
   isActive    Boolean        @default(true)
+  isFeatured  Boolean        @default(false)
   order       Int            @default(0)
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt

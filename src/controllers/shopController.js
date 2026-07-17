@@ -253,6 +253,7 @@ export const createShopSchema = z.object({
   whatsapp: z.string().optional().default(''),
   address: z.string().optional().default(''),
   isActive: z.boolean().optional().default(true),
+  isFeatured: z.boolean().optional().default(false),
   order: z.number().int().optional().default(0),
   // Owner credentials
   ownerName: z.string().min(1),
@@ -269,6 +270,7 @@ export const adminUpdateShopSchema = z.object({
   whatsapp: z.string().optional(),
   address: z.string().optional(),
   isActive: z.boolean().optional(),
+  isFeatured: z.boolean().optional(),
   order: z.number().int().optional(),
 });
 
@@ -302,6 +304,9 @@ export const adminCreateShop = asyncHandler(async (req, res) => {
       data: { ...shopData, slug, ownerId: owner.id },
       include: { owner: true, _count: { select: { products: true, orders: true } } },
     });
+    if (shop.isFeatured) {
+      await prisma.shop.updateMany({ where: { id: { not: shop.id } }, data: { isFeatured: false } });
+    }
     res.status(201).json({ success: true, data: serializeShop(shop), message: 'دکان بن گئی' });
   } catch (err) {
     await prisma.user.delete({ where: { id: owner.id } }).catch(() => {});
@@ -316,6 +321,10 @@ export const adminUpdateShop = asyncHandler(async (req, res) => {
   const data = { ...req.body };
   if (data.name && data.name !== shop.name) {
     data.slug = await uniqueSlug(prisma.shop, data.name, shop.id);
+  }
+  // Only one shop can be featured on the home page at a time.
+  if (data.isFeatured === true) {
+    await prisma.shop.updateMany({ where: { id: { not: shop.id } }, data: { isFeatured: false } });
   }
   const updated = await prisma.shop.update({
     where: { id: shop.id },
