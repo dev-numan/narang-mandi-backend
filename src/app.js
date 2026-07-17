@@ -17,6 +17,7 @@ import classifiedRoutes from './routes/classifieds.js';
 import shopRoutes from './routes/shops.js';
 import shopAdminRoutes from './routes/shopAdmin.js';
 import adminRoutes from './routes/admin.js';
+import contactRoutes from './routes/contact.js';
 import sitemapRoutes from './routes/sitemap.js';
 
 export function createApp() {
@@ -60,6 +61,7 @@ export function createApp() {
   app.use('/api/shops', shopRoutes);
   app.use('/api/shop-admin', shopAdminRoutes);
   app.use('/api/admin', adminRoutes);
+  app.use('/api/contact', contactRoutes);
   app.use('/', sitemapRoutes);
 
   // Serve the built SPA with per-route SEO meta (no-op in dev / when no build).

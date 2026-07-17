@@ -55,6 +55,7 @@ router.get('/sitemap.xml', async (req, res) => {
     { loc: `${site}/about`, priority: '0.3' },
     { loc: `${site}/contact`, priority: '0.3' },
     { loc: `${site}/privacy`, priority: '0.3' },
+    { loc: `${site}/terms`, priority: '0.3' },
     ...categories.map((c) => ({ loc: `${site}/category/${c.slug}`, priority: '0.6' })),
     ...articles.map((a) => ({ loc: `${site}/article/${a.slug}`, lastmod: iso(a.updatedAt), priority: '0.8' })),
     ...classifieds.map((c) => ({ loc: `${site}/classifieds/${c.slug}`, lastmod: iso(c.updatedAt), priority: '0.4' })),
