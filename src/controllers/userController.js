@@ -3,6 +3,7 @@ import prisma from '../lib/prisma.js';
 import { asyncHandler, ApiError } from '../utils/asyncHandler.js';
 import { hashPassword } from '../lib/password.js';
 import { serializeUser } from '../lib/serialize.js';
+import { signAccessToken } from '../utils/jwt.js';
 
 export const createUserSchema = z.object({
   name: z.string().min(1),
@@ -54,6 +55,29 @@ export const updateUser = asyncHandler(async (req, res) => {
   if (req.body.role === 'admin') data.canManageCategories = true;
   const updated = await prisma.user.update({ where: { id: user.id }, data });
   res.json({ success: true, data: serializeUser(updated), message: 'User updated' });
+});
+
+// Admin "log in as" — mints a normal access token for the target user so an
+// admin can enter that account (editor or shopkeeper panel) in one click, e.g.
+// to reproduce a problem a user reports. The token is an ordinary token for the
+// target: the session then has exactly that user's permissions, no more. Only
+// admins can call this (route is admin-guarded), and admins may not impersonate
+// another admin — that would be a lateral privilege move with no support value.
+export const impersonateUser = asyncHandler(async (req, res) => {
+  if (req.user.id === req.params.id) {
+    throw new ApiError(400, 'You are already logged in as yourself');
+  }
+  const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+  if (!user) throw new ApiError(404, 'User not found');
+  if (user.role === 'admin') {
+    throw new ApiError(403, 'You cannot log in as another admin');
+  }
+  const accessToken = signAccessToken(user);
+  res.json({
+    success: true,
+    message: `Logged in as ${user.name}`,
+    data: { user: serializeUser(user), accessToken },
+  });
 });
 
 export const deleteUser = asyncHandler(async (req, res) => {

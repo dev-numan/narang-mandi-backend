@@ -9,6 +9,7 @@ import {
   createUser,
   updateUser,
   deleteUser,
+  impersonateUser,
   createUserSchema,
   updateUserSchema,
 } from '../controllers/userController.js';
@@ -78,6 +79,7 @@ router.get('/users', requireRole('admin'), listUsers);
 router.post('/users', requireRole('admin'), validate(createUserSchema), createUser);
 router.put('/users/:id', requireRole('admin'), validate(updateUserSchema), updateUser);
 router.delete('/users/:id', requireRole('admin'), deleteUser);
+router.post('/users/:id/impersonate', requireRole('admin'), impersonateUser);
 
 // Places — any authenticated admin/editor can manage & moderate
 router.get('/places', adminListPlaces);
