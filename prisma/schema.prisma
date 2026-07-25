@@ -88,6 +88,29 @@ model ContactMessage {
   @@index([isRead, createdAt])
 }
 
+// Lead-capture for the "register your shop / register as a driver" banners on
+// the home page. Public form → stored here → admin reads at /admin/registrations.
+enum RegistrationType {
+  driver
+  shop
+}
+
+model Registration {
+  id           String           @id @default(cuid())
+  type         RegistrationType
+  name         String
+  contact      String
+  businessName String           @default("") // shop name (shop) or vehicle name/number (driver)
+  hasLicense   Boolean          @default(false) // driving licence — drivers only
+  image        String           @default("") // optional vehicle/shop photo
+  isRead       Boolean          @default(false)
+  ip           String           @default("")
+  createdAt    DateTime         @default(now())
+
+  @@index([type, createdAt])
+  @@index([isRead, createdAt])
+}
+
 model Classified {
   id          String              @id @default(cuid())
   title       String
