@@ -54,11 +54,12 @@ export const updateMeSchema = z.object({
   avatar: z.string().optional(),
   phone: z.string().max(40).optional(),
   contactEmail: z.union([z.string().email(), z.literal('')]).optional(),
+  shopAdminLang: z.enum(['en', 'ur']).optional(),
 });
 
 export const updateMe = asyncHandler(async (req, res) => {
   const data = {};
-  for (const key of ['name', 'avatar', 'phone', 'contactEmail']) {
+  for (const key of ['name', 'avatar', 'phone', 'contactEmail', 'shopAdminLang']) {
     if (req.body[key] !== undefined) data[key] = req.body[key];
   }
   // Editors may not change their own display name — only an admin can.

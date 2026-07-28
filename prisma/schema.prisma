@@ -18,6 +18,8 @@ model User {
   avatar              String    @default("")
   phone               String    @default("")
   contactEmail        String    @default("")
+  /// Shop admin UI language: "en" (default) or "ur"
+  shopAdminLang       String    @default("en")
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   articles            Article[]

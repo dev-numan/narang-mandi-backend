@@ -126,7 +126,7 @@ export const updateMyShop = asyncHandler(async (req, res) => {
 // ---------- Shop categories (owner-scoped) ----------
 
 export const shopCategorySchema = z.object({
-  name: z.string().min(1),
+  name: z.string().min(1).max(50, 'Category name is too long (max 50 characters)'),
   nameEn: z.string().optional().default(''),
   slug: z.string().optional(),
   order: z.number().int().optional().default(0),
@@ -179,7 +179,7 @@ export const deleteMyCategory = asyncHandler(async (req, res) => {
 // ---------- Products (owner-scoped) ----------
 
 export const productSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().min(1).max(50, 'Product name is too long (max 50 characters)'),
   slug: z.string().optional(),
   categoryId: z.string().nullable().optional(),
   description: z.string().optional().default(''),

@@ -16,6 +16,7 @@ import {
 } from '../controllers/shopController.js';
 import {
   listMyOrders,
+  getMyOrder,
   setOrderStatus,
   shopStats,
 } from '../controllers/orderController.js';
@@ -48,6 +49,7 @@ router.delete('/products/:id', deleteMyProduct);
 
 // Orders
 router.get('/orders', listMyOrders);
+router.get('/orders/:id', getMyOrder);
 router.patch('/orders/:id/status', setOrderStatus);
 
 export default router;

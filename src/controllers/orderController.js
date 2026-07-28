@@ -149,6 +149,17 @@ export const listMyOrders = asyncHandler(async (req, res) => {
   res.json({ success: true, data: orders.map(serializeOrder) });
 });
 
+// GET /api/shop-admin/orders/:id
+export const getMyOrder = asyncHandler(async (req, res) => {
+  const shop = await getOwnerShop(req);
+  const order = await prisma.order.findUnique({
+    where: { id: req.params.id },
+    include: { items: true },
+  });
+  if (!order || order.shopId !== shop.id) throw new ApiError(404, 'آرڈر نہیں ملا');
+  res.json({ success: true, data: serializeOrder(order) });
+});
+
 // PATCH /api/shop-admin/orders/:id/status
 export const setOrderStatus = asyncHandler(async (req, res) => {
   const status = req.body?.status;
