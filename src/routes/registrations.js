@@ -36,7 +36,7 @@ const uploadLimiter = rateLimit({
 router.post('/', registerLimiter, validate(registrationSchema), createRegistration);
 router.post('/upload', uploadLimiter, upload.single('image'), uploadImage);
 
-router.get('/', requireAuth, requireRole('admin'), listRegistrations);
+router.get('/', requireAuth, requireRole('admin', 'editor'), listRegistrations);
 router.put('/:id/read', requireAuth, requireRole('admin'), markRegistrationRead);
 router.delete('/:id', requireAuth, requireRole('admin'), deleteRegistration);
 
