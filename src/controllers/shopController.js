@@ -277,7 +277,8 @@ export const adminUpdateShopSchema = z.object({
 // GET /api/admin/shops
 export const adminListShops = asyncHandler(async (req, res) => {
   const shops = await prisma.shop.findMany({
-    orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
+    // Most products first so stocked shops surface above empty ones.
+    orderBy: [{ products: { _count: 'desc' } }, { createdAt: 'desc' }],
     include: {
       owner: true,
       _count: { select: { products: true, orders: true } },
