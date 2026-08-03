@@ -35,7 +35,15 @@ router.get('/sitemap.xml', async (req, res) => {
 
   const [articles, categories] = await Promise.all([
     safe(prisma.article.findMany({ where: { status: 'published' }, select: { slug: true, updatedAt: true } })),
-    safe(prisma.category.findMany({ where: { isActive: true }, select: { slug: true } })),
+    // A category with no published article renders a heading and an empty list —
+    // the same near-blank page the listing routes were submitting. Only offer
+    // categories that actually have something to show.
+    safe(
+      prisma.category.findMany({
+        where: { isActive: true, articles: { some: { status: 'published' } } },
+        select: { slug: true },
+      })
+    ),
   ]);
 
   let classifieds = [];
