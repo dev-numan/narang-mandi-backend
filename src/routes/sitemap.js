@@ -21,41 +21,58 @@ const iso = (d) => (d ? new Date(d).toISOString() : undefined);
 // Never let one missing table / transient error break the whole sitemap.
 const safe = (p) => p.then((r) => r).catch(() => []);
 
+// Only routes that client/server.js prerenders may be submitted: /, /category/:slug,
+// /article/:slug and the static pages. Every other route falls through to its
+// `app.get('*')` handler and returns the bare SPA shell — six words of visible text.
+// Submitting 166 such URLs is what got the site flagged for "low value content" by
+// AdSense on 3 Aug 2026. Flip SITEMAP_INCLUDE_LISTINGS=true once shops, classifieds,
+// places, trains and community render real content server-side.
+const INCLUDE_LISTINGS = process.env.SITEMAP_INCLUDE_LISTINGS === 'true';
+
 // GET /sitemap.xml — all public URLs (news, sections, listings, shops if present).
 router.get('/sitemap.xml', async (req, res) => {
   const site = siteBase();
 
-  const [articles, categories, classifieds] = await Promise.all([
+  const [articles, categories] = await Promise.all([
     safe(prisma.article.findMany({ where: { status: 'published' }, select: { slug: true, updatedAt: true } })),
     safe(prisma.category.findMany({ where: { isActive: true }, select: { slug: true } })),
-    safe(prisma.classified.findMany({ where: { status: 'approved' }, select: { slug: true, updatedAt: true } })),
   ]);
 
-  // Shops/products only exist once the Dukanen tables are migrated.
+  let classifieds = [];
   let shops = [];
   let products = [];
-  if (prisma.shop && prisma.product) {
-    [shops, products] = await Promise.all([
-      safe(prisma.shop.findMany({ where: { isActive: true }, select: { slug: true, updatedAt: true } })),
-      safe(
-        prisma.product.findMany({
-          where: { isActive: true, shop: { isActive: true } },
-          select: { slug: true, updatedAt: true, shop: { select: { slug: true } } },
-        })
-      ),
-    ]);
+  if (INCLUDE_LISTINGS) {
+    classifieds = await safe(
+      prisma.classified.findMany({ where: { status: 'approved' }, select: { slug: true, updatedAt: true } })
+    );
+    // Shops/products only exist once the Dukanen tables are migrated.
+    if (prisma.shop && prisma.product) {
+      [shops, products] = await Promise.all([
+        safe(prisma.shop.findMany({ where: { isActive: true }, select: { slug: true, updatedAt: true } })),
+        safe(
+          prisma.product.findMany({
+            where: { isActive: true, shop: { isActive: true } },
+            select: { slug: true, updatedAt: true, shop: { select: { slug: true } } },
+          })
+        ),
+      ]);
+    }
   }
 
   const urls = [
     { loc: `${site}/`, priority: '1.0' },
-    { loc: `${site}/classifieds`, priority: '0.5' },
-    { loc: `${site}/places`, priority: '0.5' },
-    { loc: `${site}/trains`, priority: '0.5' },
-    { loc: `${site}/community`, priority: '0.5' },
     { loc: `${site}/about`, priority: '0.3' },
     { loc: `${site}/contact`, priority: '0.3' },
     { loc: `${site}/privacy`, priority: '0.3' },
     { loc: `${site}/terms`, priority: '0.3' },
+    ...(INCLUDE_LISTINGS
+      ? [
+          { loc: `${site}/classifieds`, priority: '0.5' },
+          { loc: `${site}/places`, priority: '0.5' },
+          { loc: `${site}/trains`, priority: '0.5' },
+          { loc: `${site}/community`, priority: '0.5' },
+        ]
+      : []),
     ...categories.map((c) => ({ loc: `${site}/category/${c.slug}`, priority: '0.6' })),
     ...articles.map((a) => ({ loc: `${site}/article/${a.slug}`, lastmod: iso(a.updatedAt), priority: '0.8' })),
     ...classifieds.map((c) => ({ loc: `${site}/classifieds/${c.slug}`, lastmod: iso(c.updatedAt), priority: '0.4' })),
