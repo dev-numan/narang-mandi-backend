@@ -58,6 +58,17 @@ import {
   createShopSchema,
   adminUpdateShopSchema,
 } from '../controllers/shopController.js';
+import {
+  adminCreateDriver,
+  adminCreateDriverSchema,
+  adminGetRide,
+  adminListDrivers,
+  adminListRides,
+  adminSetDriverStatus,
+  adminSetRideStatus,
+  adminUpdateDriver,
+  adminUpdateDriverSchema,
+} from '../controllers/driverController.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 
@@ -80,6 +91,16 @@ router.post('/users', requireRole('admin'), validate(createUserSchema), createUs
 router.put('/users/:id', requireRole('admin'), validate(updateUserSchema), updateUser);
 router.delete('/users/:id', requireRole('admin'), deleteUser);
 router.post('/users/:id/impersonate', requireRole('admin'), impersonateUser);
+
+// Taxi — drivers and ride oversight. Admin only: rides carry customer phone
+// numbers, so editors must not reach these.
+router.get('/drivers', adminListDrivers);
+router.post('/drivers', validate(adminCreateDriverSchema), adminCreateDriver);
+router.put('/drivers/:id', validate(adminUpdateDriverSchema), adminUpdateDriver);
+router.patch('/drivers/:id/status', adminSetDriverStatus);
+router.get('/rides', adminListRides);
+router.get('/rides/:id', adminGetRide);
+router.patch('/rides/:id/status', adminSetRideStatus);
 
 // Places — any authenticated admin/editor can manage & moderate
 router.get('/places', adminListPlaces);

@@ -9,13 +9,13 @@ export const createUserSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(6),
-  role: z.enum(['admin', 'editor', 'shopkeeper']).optional().default('editor'),
+  role: z.enum(['admin', 'editor', 'shopkeeper', 'driver']).optional().default('editor'),
   canManageCategories: z.boolean().optional().default(false),
 });
 
 export const updateUserSchema = z.object({
   name: z.string().min(1).optional(),
-  role: z.enum(['admin', 'editor', 'shopkeeper']).optional(),
+  role: z.enum(['admin', 'editor', 'shopkeeper', 'driver']).optional(),
   password: z.string().min(6).optional(),
   canManageCategories: z.boolean().optional(),
 });

@@ -38,9 +38,21 @@ export const listShops = asyncHandler(async (req, res) => {
   const shops = await prisma.shop.findMany({
     where,
     orderBy: [{ order: 'asc' }, { createdAt: 'desc' }],
-    include: { _count: { select: { products: true } } },
+    // Active only, so the number shown on a card matches what opening the shop
+    // actually lists — and so a shop whose stock is all hidden cannot outrank
+    // one with products on display.
+    include: { _count: { select: { products: { where: { isActive: true } } } } },
   });
-  res.json({ success: true, data: shops.map(serializeShop) });
+
+  // Sorted here rather than in the query: Prisma can order by a relation count
+  // but not by a *filtered* one, and this endpoint returns every shop, so the
+  // ordering is exact. Array.sort is stable, so shops with equal counts keep
+  // the curated `order` the query already applied.
+  const data = shops
+    .map(serializeShop)
+    .sort((a, b) => (b.productCount || 0) - (a.productCount || 0));
+
+  res.json({ success: true, data });
 });
 
 // GET /api/shops/:slug — public shop profile + its active categories
@@ -178,13 +190,16 @@ export const deleteMyCategory = asyncHandler(async (req, res) => {
 
 // ---------- Products (owner-scoped) ----------
 
+// Must stay non-strict. Installed Android builds from before stock tracking was
+// removed still send a `stock` key, and zod's default unknown-key stripping is
+// the only reason those saves keep working — `.strict()` here would turn every
+// product save from an old APK into a validation error.
 export const productSchema = z.object({
   name: z.string().min(1).max(50, 'Product name is too long (max 50 characters)'),
   slug: z.string().optional(),
   categoryId: z.string().nullable().optional(),
   description: z.string().optional().default(''),
   price: z.number().int().nonnegative().optional().default(0),
-  stock: z.number().int().nonnegative().optional().default(0),
   images: z.array(z.string()).optional().default([]),
   isActive: z.boolean().optional().default(true),
 });

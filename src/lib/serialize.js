@@ -136,7 +136,10 @@ export function serializeProduct(p) {
 
 export function serializeOrder(o) {
   if (!o) return o;
-  const { shopId, shop, items, ...rest } = o;
+  // deviceToken is a push credential and is never part of a response — order
+  // lookup is public (number + phone), so leaking it would hand any caller the
+  // ability to be pushed to as that customer.
+  const { shopId, shop, items, deviceToken, notifications, ...rest } = o;
   const out = withId(rest);
   if (shop !== undefined) out.shop = shop ? serializeShop(shop) : null;
   if (items !== undefined) {
@@ -155,3 +158,141 @@ export const CATEGORY_BRIEF = { select: { id: true, name: true, slug: true } };
 export const AUTHOR_BRIEF = {
   select: { id: true, name: true, avatar: true, phone: true, contactEmail: true },
 };
+
+// ---------- Taxi (rides + bids) ----------
+
+/// What a customer may know about the driver who is bidding. Contact details are
+/// deliberately absent — they are grafted on only for the winner, once the ride
+/// is assigned and the two of them need to speak.
+/// Contact details are selected but not exposed: `driverCard` strips them
+/// unless the caller asks, which happens only once a ride is assigned. Leaving
+/// them out of the query instead would mean the winner's number could never be
+/// revealed at all.
+export const DRIVER_PUBLIC = {
+  select: {
+    id: true,
+    phone: true,
+    whatsapp: true,
+    vehicleType: true,
+    vehicleNumber: true,
+    photo: true,
+    isVerified: true,
+    completedRides: true,
+    user: { select: { name: true } },
+  },
+};
+
+/// For the manual-contact fallback, where handing over the number is the entire
+/// point. Separate from DRIVER_PUBLIC because that one never selects isActive.
+export const DRIVER_CONTACT = {
+  select: {
+    id: true,
+    phone: true,
+    whatsapp: true,
+    vehicleType: true,
+    vehicleNumber: true,
+    photo: true,
+    isVerified: true,
+    completedRides: true,
+    user: { select: { name: true } },
+  },
+};
+
+export function serializeDriverContact(d) {
+  return driverCard(d, { includeContact: true });
+}
+
+function driverCard(d, { includeContact = false } = {}) {
+  if (!d) return null;
+  const { id, user, phone, whatsapp, ...rest } = d;
+  return {
+    _id: id,
+    name: user?.name || '',
+    ...rest,
+    ...(includeContact ? { phone, whatsapp } : {}),
+  };
+}
+
+/**
+ * A bid as the customer sees it: price, and enough about the driver to choose
+ * between them.
+ */
+export function serializeBid(b, { includeContact = false } = {}) {
+  if (!b) return b;
+  const { id, driverId, rideId, driver, ...rest } = b;
+  return {
+    _id: id,
+    ...rest,
+    ...(driver !== undefined ? { driver: driverCard(driver, { includeContact }) } : {}),
+  };
+}
+
+/**
+ * The customer's own view of their ride.
+ *
+ * `deviceToken` is a push credential and `accessToken` names their private
+ * socket room; neither may appear in a response body — the same reasoning that
+ * strips `Order.deviceToken` in `serializeOrder`. The caller passes
+ * `includeAccessToken` only on create and lookup, where the customer needs it
+ * to open the socket.
+ */
+export function serializeRideForCustomer(r, { includeAccessToken = false } = {}) {
+  if (!r) return r;
+  const { id, deviceToken, accessToken, assignedDriverId, acceptedBidId, ip, driver, bids, events, notifications, ...rest } = r;
+  const assigned = r.status === 'assigned' || r.status === 'completed';
+  return {
+    _id: id,
+    ...rest,
+    ...(includeAccessToken ? { accessToken } : {}),
+    ...(driver !== undefined ? { driver: driverCard(driver, { includeContact: assigned }) } : {}),
+    ...(bids !== undefined
+      ? { bids: bids.map((b) => serializeBid(b, { includeContact: assigned && b.id === acceptedBidId })) }
+      : {}),
+  };
+}
+
+/**
+ * The same ride as a driver sees it — without the customer's identity.
+ *
+ * A driver is shown who they are collecting only after they have won the ride,
+ * so an open request cannot be harvested for phone numbers. Rival bids never
+ * appear at all: `bidCount` says how much competition there is, and the
+ * driver's own bid is attached separately as `myBid`.
+ */
+export function serializeRideForDriver(r, { myBid = undefined, isWinner = false } = {}) {
+  if (!r) return r;
+  const { id, deviceToken, accessToken, ip, customerName, customerPhone, assignedDriverId, acceptedBidId, driver, bids, events, notifications, ...rest } = r;
+  return {
+    _id: id,
+    ...rest,
+    ...(isWinner ? { customerName, customerPhone } : {}),
+    ...(myBid !== undefined ? { myBid: myBid ? serializeBid(myBid) : null } : {}),
+  };
+}
+
+export function serializeRideEvent(e) {
+  return e ? withId(e) : e;
+}
+
+/// Admin sees everything except the two credentials.
+export function serializeRideForAdmin(r) {
+  if (!r) return r;
+  const { id, deviceToken, accessToken, driver, bids, events, ...rest } = r;
+  return {
+    _id: id,
+    ...rest,
+    ...(driver !== undefined ? { driver: driverCard(driver, { includeContact: true }) } : {}),
+    ...(bids !== undefined ? { bids: bids.map((b) => serializeBid(b, { includeContact: true })) } : {}),
+    ...(events !== undefined ? { events: events.map(serializeRideEvent) } : {}),
+  };
+}
+
+export function serializeDriver(d) {
+  if (!d) return d;
+  const { id, userId, user, ...rest } = d;
+  return {
+    _id: id,
+    ...rest,
+    ...(user !== undefined ? { name: user.name, email: user.email } : {}),
+  };
+}

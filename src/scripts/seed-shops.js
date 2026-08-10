@@ -26,10 +26,10 @@ const CATEGORIES = [
 ];
 
 const PRODUCTS = [
-  { name: 'چاول (5 کلو)', price: 1200, stock: 25, cat: 'کریانہ' },
-  { name: 'چینی (1 کلو)', price: 160, stock: 40, cat: 'کریانہ' },
-  { name: 'کوکا کولا (1.5 لیٹر)', price: 150, stock: 60, cat: 'مشروبات' },
-  { name: 'ڈبل روٹی', price: 130, stock: 15, cat: 'بیکری' },
+  { name: 'چاول (5 کلو)', price: 1200, cat: 'کریانہ' },
+  { name: 'چینی (1 کلو)', price: 160, cat: 'کریانہ' },
+  { name: 'کوکا کولا (1.5 لیٹر)', price: 150, cat: 'مشروبات' },
+  { name: 'ڈبل روٹی', price: 130, cat: 'بیکری' },
 ];
 
 async function run() {
@@ -72,7 +72,6 @@ async function run() {
         name: p.name,
         slug,
         price: p.price,
-        stock: p.stock,
         shopId: shop.id,
         categoryId: catByName[p.cat] || null,
       },

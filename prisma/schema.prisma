@@ -24,6 +24,8 @@ model User {
   updatedAt           DateTime  @updatedAt
   articles            Article[]
   shops               Shop[]
+  deviceTokens        DeviceToken[]
+  driver              Driver?
 }
 
 model Category {
@@ -331,13 +333,69 @@ model Order {
   note          String      @default("")
   total         Int         @default(0)
   status        OrderStatus @default(pending)
+  /// FCM token of the device that placed the order. Checkout is a guest flow,
+  /// so this is the only handle we have on a customer who never logs in.
+  deviceToken   String?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   shop          Shop        @relation(fields: [shopId], references: [id])
   items         OrderItem[]
+  notifications NotificationLog[]
 
   @@index([shopId])
   @@index([status])
+}
+
+/// One row per push/WhatsApp target we tried to reach. Exists so "the shopkeeper
+/// says they never got the order" has an answer other than a guess.
+model NotificationLog {
+  id        String   @id @default(cuid())
+  /// Exactly one of orderId / rideId is set. Both are nullable because the log
+  /// serves two unrelated subjects; the dispatcher refuses to write a row with
+  /// neither.
+  orderId   String?
+  rideId    String?
+  /// "order_placed" | "order_status" | "ride_new" | "ride_bid" | "ride_assigned" | "ride_cancelled"
+  event     String
+  /// "fcm" | "whatsapp"
+  channel   String
+  /// "shop" | "customer" | "driver"
+  audience  String
+  /// Phone number, or the tail of a device token — enough to identify, not to reuse.
+  target    String   @default("")
+  /// "sent" | "failed" | "skipped" | "delivered" | "read" | "undelivered"
+  ///
+  /// The last three only ever arrive from the WhatsApp webhook. "sent" means
+  /// Meta accepted the message, which is not the same as it reaching a handset —
+  /// that distinction is the whole reason the webhook exists.
+  status    String
+  error     String?
+  /// WhatsApp's `wamid`, kept so a webhook status can find the row it belongs
+  /// to. Null for FCM and for anything that never reached the provider.
+  providerMessageId String?
+  createdAt DateTime @default(now())
+  order     Order?   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  ride      Ride?    @relation(fields: [rideId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([rideId])
+  @@index([createdAt])
+  /// Every webhook status arrives keyed by this and nothing else.
+  @@index([providerMessageId])
+}
+
+model DeviceToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  /// Null for guest customers — they have no account, but they still get pushes
+  /// via the token recorded on their order.
+  userId    String?
+  platform  String   @default("android")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 model OrderItem {
@@ -358,6 +416,7 @@ enum Role {
   admin
   editor
   shopkeeper
+  driver
 }
 
 enum OrderStatus {
@@ -381,5 +440,144 @@ enum ClassifiedStatus {
 enum PlaceStatus {
   pending
   approved
+  rejected
+}
+
+// ---------------------------------------------------------------- Taxi / rides
+
+/// A driver's profile. Kept separate from User rather than widening it: a bid
+/// points at a profile the database can enforce, not at a User row that merely
+/// happens to carry role='driver'. Unlike Shop.ownerId this is @unique, so the
+/// owner lookup is an exact findUnique instead of "the oldest row that matches".
+model Driver {
+  id             String     @id @default(cuid())
+  userId         String     @unique
+  phone          String     @default("")
+  whatsapp       String     @default("")
+  /// Free text, as the shopkeeper writes it: رکشہ / کار / بائیک.
+  vehicleType    String     @default("")
+  vehicleNumber  String     @default("")
+  photo          String     @default("")
+  isActive       Boolean    @default(true)
+  isVerified     Boolean    @default(false)
+  completedRides Int        @default(0)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bids           Bid[]
+  assignedRides  Ride[]     @relation("AssignedDriver")
+
+  /// Serves both the push fan-out to active drivers and the admin filter.
+  @@index([isActive])
+}
+
+/// A ride request from a guest. Locations are plain text on purpose — no map,
+/// no coordinates: people here describe a place by name, not by pin.
+model Ride {
+  id               String      @id @default(cuid())
+  /// 8-digit handle the customer keeps, paired with their phone to prove ownership.
+  rideCode         String      @unique
+  /// Names the customer's private socket room. Never leaves a customer response.
+  accessToken      String      @unique
+  customerName     String
+  customerPhone    String
+  pickupText       String
+  dropoffText      String
+  /// Free text: "ابھی" / "شام 5 بجے".
+  whenText         String      @default("")
+  note             String      @default("")
+  status           RideStatus  @default(open)
+  assignedDriverId String?
+  acceptedBidId    String?     @unique
+  /// Snapshot of the winning bid's price. Deliberately not read through
+  /// acceptedBid.price — a driver editing a bid later must not rewrite an
+  /// already-agreed fare.
+  agreedPrice      Int         @default(0)
+  bidCount         Int         @default(0)
+  lastBidAt        DateTime?
+  /// When the customer was last told about bids over WhatsApp. Separate from
+  /// lastBidAt, which moves on every bid — this one only moves when a billable
+  /// message actually goes out, which is what makes it usable as a cooldown.
+  lastWhatsAppAt   DateTime?
+  /// FCM token of the device that requested the ride — the only handle on a
+  /// customer who never logs in. Stripped from every response.
+  deviceToken      String?
+  cancelReason     String      @default("")
+  /// "customer" | "driver" | "admin" | "system"
+  cancelledBy      String      @default("")
+  ip               String      @default("")
+  expiresAt        DateTime
+  assignedAt       DateTime?
+  completedAt      DateTime?
+  cancelledAt      DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  driver           Driver?     @relation("AssignedDriver", fields: [assignedDriverId], references: [id])
+  acceptedBid      Bid?        @relation("AcceptedBid", fields: [acceptedBidId], references: [id], onDelete: SetNull)
+  bids             Bid[]       @relation("RideBids")
+  events           RideEvent[]
+  notifications    NotificationLog[]
+
+  @@index([status, createdAt])
+  @@index([status, expiresAt])
+  @@index([assignedDriverId, status])
+  @@index([customerPhone, status])
+}
+
+model Bid {
+  id          String    @id @default(cuid())
+  rideId      String
+  driverId    String
+  price       Int
+  etaMinutes  Int       @default(0)
+  note        String    @default("")
+  status      BidStatus @default(active)
+  /// Capped, so a price war cannot become a write loop.
+  reviseCount Int       @default(0)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  ride        Ride      @relation("RideBids", fields: [rideId], references: [id], onDelete: Cascade)
+  driver      Driver    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  acceptedFor Ride?     @relation("AcceptedBid")
+
+  /// One bid per driver per ride: re-bidding is an update, so no driver can
+  /// flood a request.
+  @@unique([rideId, driverId])
+  @@index([rideId, status])
+  @@index([driverId, createdAt])
+}
+
+/// Append-only history of what happened to a ride. Holds no foreign key to Bid
+/// or User on purpose, so it survives their deletion — this is the record that
+/// answers "the driver says the customer never accepted".
+model RideEvent {
+  id          String   @id @default(cuid())
+  rideId      String
+  /// ride_created | bid_placed | bid_revised | bid_withdrawn | bid_accepted | ride_completed | ride_cancelled
+  type        String
+  /// "customer" | "driver" | "admin" | "system"
+  actor       String   @default("system")
+  actorUserId String   @default("")
+  bidId       String   @default("")
+  fromStatus  String   @default("")
+  toStatus    String   @default("")
+  price       Int      @default(0)
+  createdAt   DateTime @default(now())
+  ride        Ride     @relation(fields: [rideId], references: [id], onDelete: Cascade)
+
+  @@index([rideId, createdAt])
+}
+
+enum RideStatus {
+  open
+  assigned
+  completed
+  cancelled
+}
+
+enum BidStatus {
+  active
+  withdrawn
+  accepted
   rejected
 }

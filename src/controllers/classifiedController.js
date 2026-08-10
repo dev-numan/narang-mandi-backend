@@ -7,22 +7,10 @@ import {
   serializeClassifiedCategory,
   CLASSIFIED_CATEGORY_BRIEF,
 } from '../lib/serialize.js';
+import { uniqueNumericCode } from '../utils/code.js';
+import { normalizePhone } from '../utils/phone.js';
 
-async function generateSaleCode() {
-  for (let attempt = 0; attempt < 25; attempt++) {
-    const saleCode = String(Math.floor(10000000 + Math.random() * 90000000));
-    const exists = await prisma.classified.findUnique({ where: { saleCode } });
-    if (!exists) return saleCode;
-  }
-  throw new ApiError(500, 'Could not generate sale code');
-}
-
-// Compare phones regardless of +92 / 0 prefix formatting.
-function normalizePhone(phone = '') {
-  const digits = String(phone).replace(/\D/g, '');
-  if (digits.length >= 10) return digits.slice(-10);
-  return digits;
-}
+const generateSaleCode = () => uniqueNumericCode(prisma.classified, 'saleCode');
 
 // ---------- Classified Categories ----------
 

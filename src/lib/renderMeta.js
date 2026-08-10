@@ -132,7 +132,8 @@ export async function metaForPath(pathname) {
             '@type': 'Offer',
             price: product.price,
             priceCurrency: 'PKR',
-            availability: product.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+            // Inventory is not tracked, so an active product is always orderable.
+            availability: 'https://schema.org/InStock',
             url: canonical,
           },
         },

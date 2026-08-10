@@ -16,10 +16,14 @@ import trainRoutes from './routes/trains.js';
 import classifiedRoutes from './routes/classifieds.js';
 import shopRoutes from './routes/shops.js';
 import shopAdminRoutes from './routes/shopAdmin.js';
+import deviceRoutes from './routes/devices.js';
 import adminRoutes from './routes/admin.js';
 import contactRoutes from './routes/contact.js';
 import registrationRoutes from './routes/registrations.js';
 import sitemapRoutes from './routes/sitemap.js';
+import webhookRoutes from './routes/webhooks.js';
+import rideRoutes from './routes/rides.js';
+import driverRoutes from './routes/driver.js';
 
 export function createApp() {
   const app = express();
@@ -39,7 +43,16 @@ export function createApp() {
       credentials: true,
     })
   );
-  app.use(express.json({ limit: '2mb' }));
+  app.use(
+  express.json({
+    limit: '2mb',
+    // Kept so the WhatsApp webhook can verify Meta's x-hub-signature-256, which
+    // is computed over the exact bytes sent rather than the reparsed object.
+    verify: (req, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
   app.use(cookieParser());
 
   // Serve locally-stored uploads. Long-lived cache headers ("expires") let
@@ -61,9 +74,13 @@ export function createApp() {
   app.use('/api/classifieds', classifiedRoutes);
   app.use('/api/shops', shopRoutes);
   app.use('/api/shop-admin', shopAdminRoutes);
+  app.use('/api/devices', deviceRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/contact', contactRoutes);
   app.use('/api/registrations', registrationRoutes);
+  app.use('/api/webhooks', webhookRoutes);
+  app.use('/api/rides', rideRoutes);
+  app.use('/api/driver', driverRoutes);
   app.use('/', sitemapRoutes);
 
   // Serve the built SPA with per-route SEO meta (no-op in dev / when no build).
