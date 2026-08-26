@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 import { z } from 'zod';
 import prisma, { runTransaction } from '../lib/prisma.js';
 import { asyncHandler, ApiError } from '../utils/asyncHandler.js';
@@ -11,7 +12,7 @@ import {
 import { hashPassword } from '../lib/password.js';
 import { sweepExpiredRides } from './rideController.js';
 import { emitRide, emitToDriver } from '../lib/socket.js';
-import { notifyBidPlaced } from '../lib/notify/rides.js';
+import { notifyBidPlaced, notifyRideCancelled } from '../lib/notify/rides.js';
 
 /// A driver may change their price this many times on one ride. Without a cap a
 /// bidding war is an unbounded write loop on the same row.
@@ -272,12 +273,53 @@ export const adminCreateDriverSchema = z.object({
 
 export const adminListDrivers = asyncHandler(async (req, res) => {
   const active = req.query.active === undefined ? undefined : req.query.active === 'true';
+  const search = String(req.query.search || '').trim();
+
+  const where = {
+    ...(active === undefined ? {} : { isActive: active }),
+    ...(search
+      ? {
+          OR: [
+            { phone: { contains: search, mode: 'insensitive' } },
+            { whatsapp: { contains: search, mode: 'insensitive' } },
+            { vehicleNumber: { contains: search, mode: 'insensitive' } },
+            { user: { name: { contains: search, mode: 'insensitive' } } },
+          ],
+        }
+      : {}),
+  };
+
   const drivers = await prisma.driver.findMany({
-    where: active === undefined ? {} : { isActive: active },
+    where,
     orderBy: { createdAt: 'desc' },
-    include: { user: { select: { name: true, email: true } } },
+    include: {
+      // deviceTokens tells the panel whether a driver is reachable at all: a
+      // driver with none hears about a ride only over WhatsApp, so a zero here
+      // plus a failing template means they are notified by nothing.
+      user: { select: { name: true, email: true, _count: { select: { deviceTokens: true } } } },
+      _count: { select: { bids: true, assignedRides: true } },
+    },
   });
-  res.json({ success: true, data: drivers.map(serializeDriver) });
+
+  // Wins are counted separately because `assignedRides` includes rides that were
+  // later cancelled, which would overstate how many a driver actually landed.
+  const wins = await prisma.ride.groupBy({
+    by: ['assignedDriverId'],
+    where: { assignedDriverId: { not: null }, status: { in: ['assigned', 'completed'] } },
+    _count: { _all: true },
+  });
+  const winsByDriver = Object.fromEntries(wins.map((w) => [w.assignedDriverId, w._count._all]));
+
+  res.json({
+    success: true,
+    data: drivers.map((d) => ({
+      ...serializeDriver(d),
+      bidCount: d._count.bids,
+      rideCount: d._count.assignedRides,
+      wins: winsByDriver[d.id] || 0,
+      deviceTokenCount: d.user._count.deviceTokens,
+    })),
+  });
 });
 
 export const adminCreateDriver = asyncHandler(async (req, res) => {
@@ -335,7 +377,11 @@ export const adminUpdateDriver = asyncHandler(async (req, res) => {
 });
 
 export const adminSetDriverStatus = asyncHandler(async (req, res) => {
-  const isActive = Boolean(req.body?.isActive);
+  // Checked rather than coerced: `Boolean(undefined)` is false, so a request
+  // that forgot the body used to silently suspend the driver it was meant to
+  // leave alone. Mirrors adminSetShopStatus.
+  const isActive = req.body?.isActive;
+  if (typeof isActive !== 'boolean') throw new ApiError(400, 'isActive درکار ہے');
   const driver = await prisma.driver.update({
     where: { id: req.params.id },
     data: { isActive },
@@ -345,6 +391,205 @@ export const adminSetDriverStatus = asyncHandler(async (req, res) => {
     success: true,
     data: serializeDriver(driver),
     message: isActive ? 'ڈرائیور فعال' : 'ڈرائیور بند',
+  });
+});
+
+/**
+ * Resets one driver's password and hands the plaintext back exactly once.
+ *
+ * These are read out over the phone, so the generated value follows the
+ * create-driver convention — first name plus four digits — rather than being a
+ * random string nobody can dictate. The plaintext is returned and never logged
+ * or stored; bcrypt cannot give it back afterwards.
+ */
+export const adminResetDriverPassword = asyncHandler(async (req, res) => {
+  const driver = await prisma.driver.findUnique({
+    where: { id: req.params.id },
+    include: { user: { select: { id: true, name: true } } },
+  });
+  if (!driver) throw new ApiError(404, 'ڈرائیور نہیں ملا');
+
+  const first = (driver.user.name || 'driver').trim().split(/\s+/)[0].toLowerCase();
+  const ascii = first.replace(/[^a-z]/g, '') || 'driver';
+  const password = `${ascii}${randomInt(1000, 10000)}`;
+
+  await prisma.user.update({
+    where: { id: driver.user.id },
+    data: { passwordHash: await hashPassword(password) },
+  });
+
+  res.json({ success: true, data: { password }, message: 'پاس ورڈ تبدیل ہو گیا' });
+});
+
+/// Buckets a date into its Pakistan-time calendar day (`YYYY-MM-DD`).
+///
+/// The operator's day is what "today" has to mean on this dashboard, and the
+/// server may well run in UTC — where the 11pm rides that dominate this data
+/// would land on tomorrow's row.
+const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
+function pktDay(date) {
+  return new Date(date.getTime() + PKT_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+/// Start of the current Pakistan-time day, as a real UTC instant.
+function pktTodayStart() {
+  const now = new Date();
+  const shifted = new Date(now.getTime() + PKT_OFFSET_MS);
+  return new Date(
+    Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate()) - PKT_OFFSET_MS
+  );
+}
+
+/**
+ * Everything the taxi dashboard needs, in one round trip.
+ *
+ * Day bucketing happens in JS rather than SQL: this codebase has no raw-query
+ * precedent and Prisma cannot group by a computed date, so the rows for the
+ * window are fetched thin (three columns) and counted here.
+ */
+export const adminRideStats = asyncHandler(async (req, res) => {
+  // Stale `open` rides would otherwise be counted as live — nothing sweeps them
+  // on a timer, only reads like this one.
+  await sweepExpiredRides();
+
+  const days = Math.min(90, Math.max(1, Number(req.query.days) || 30));
+  const windowStart = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const todayStart = pktTodayStart();
+
+  const [windowRides, windowBids, cancelSplit, drivers, reachable, notifications, openNow] =
+    await Promise.all([
+      prisma.ride.findMany({
+        where: { createdAt: { gte: windowStart } },
+        select: { createdAt: true, status: true, cancelledBy: true, bidCount: true, agreedPrice: true },
+      }),
+      prisma.bid.findMany({
+        where: { createdAt: { gte: windowStart } },
+        select: { createdAt: true, price: true, driverId: true, rideId: true },
+      }),
+      prisma.ride.groupBy({
+        by: ['cancelledBy'],
+        where: { createdAt: { gte: windowStart }, status: 'cancelled' },
+        _count: { _all: true },
+      }),
+      prisma.driver.findMany({
+        select: { isActive: true, isVerified: true, photo: true, vehicleType: true },
+      }),
+      prisma.driver.count({ where: { isActive: true, user: { deviceTokens: { some: {} } } } }),
+      // Bounded by createdAt on purpose: it is the only index on this table, so
+      // an unbounded groupBy here would seq-scan the whole log.
+      prisma.notificationLog.groupBy({
+        by: ['event', 'channel', 'status'],
+        where: { createdAt: { gte: windowStart } },
+        _count: { _all: true },
+      }),
+      prisma.ride.count({ where: { status: 'open' } }),
+    ]);
+
+  // The counts alone say a channel is failing; the provider's own message says
+  // why. Without this the panel can only report "20 failed" for what is really
+  // one unpublished WhatsApp template.
+  const failures = await prisma.notificationLog.findMany({
+    where: { createdAt: { gte: windowStart }, status: 'failed', NOT: { error: null } },
+    orderBy: { createdAt: 'desc' },
+    take: 40,
+    select: { channel: true, event: true, error: true, createdAt: true },
+  });
+  const seenError = new Set();
+  const recentErrors = failures.filter((f) => {
+    const key = `${f.channel}|${(f.error || '').slice(0, 80)}`;
+    if (seenError.has(key)) return false;
+    seenError.add(key);
+    return true;
+  });
+
+  const isToday = (d) => d >= todayStart;
+  const byStatus = (rows, status) => rows.filter((r) => r.status === status).length;
+
+  // One row per calendar day in the window, including the days nothing happened —
+  // a chart that silently omits empty days misreads a quiet week as a busy one.
+  const series = [];
+  const dayIndex = {};
+  for (let i = days - 1; i >= 0; i -= 1) {
+    const key = pktDay(new Date(Date.now() - i * 24 * 60 * 60 * 1000));
+    dayIndex[key] = series.length;
+    series.push({ date: key, rides: 0, bids: 0, completed: 0, cancelled: 0 });
+  }
+  for (const r of windowRides) {
+    const row = series[dayIndex[pktDay(r.createdAt)]];
+    if (!row) continue;
+    row.rides += 1;
+    if (r.status === 'completed') row.completed += 1;
+    if (r.status === 'cancelled') row.cancelled += 1;
+  }
+  for (const b of windowBids) {
+    const row = series[dayIndex[pktDay(b.createdAt)]];
+    if (row) row.bids += 1;
+  }
+
+  const prices = windowBids.map((b) => b.price).sort((a, b) => a - b);
+  const agreed = windowRides.filter((r) => r.agreedPrice > 0).map((r) => r.agreedPrice);
+  const median = prices.length ? prices[Math.floor(prices.length / 2)] : 0;
+
+  const todayRides = windowRides.filter((r) => isToday(r.createdAt));
+  const withBids = windowRides.filter((r) => r.bidCount > 0).length;
+
+  res.json({
+    success: true,
+    data: {
+      days,
+      today: {
+        rides: todayRides.length,
+        completed: byStatus(todayRides, 'completed'),
+        cancelled: byStatus(todayRides, 'cancelled'),
+        open: byStatus(todayRides, 'open'),
+        assigned: byStatus(todayRides, 'assigned'),
+        bids: windowBids.filter((b) => isToday(b.createdAt)).length,
+      },
+      window: {
+        rides: windowRides.length,
+        completed: byStatus(windowRides, 'completed'),
+        cancelled: byStatus(windowRides, 'cancelled'),
+        open: byStatus(windowRides, 'open'),
+        assigned: byStatus(windowRides, 'assigned'),
+        bids: windowBids.length,
+        biddingDrivers: new Set(windowBids.map((b) => b.driverId)).size,
+        ridesWithBids: withBids,
+        ridesWithoutBids: windowRides.length - withBids,
+      },
+      openNow,
+      // Splits the headline "cancelled" number into people who changed their
+      // mind and requests that simply timed out — very different problems.
+      cancellations: Object.fromEntries(
+        cancelSplit.map((c) => [c.cancelledBy || 'unknown', c._count._all])
+      ),
+      prices: {
+        min: prices[0] || 0,
+        median,
+        max: prices[prices.length - 1] || 0,
+        avgAgreed: agreed.length ? Math.round(agreed.reduce((a, b) => a + b, 0) / agreed.length) : 0,
+      },
+      drivers: {
+        total: drivers.length,
+        active: drivers.filter((d) => d.isActive).length,
+        verified: drivers.filter((d) => d.isVerified).length,
+        reachable,
+        noPhoto: drivers.filter((d) => d.isActive && !d.photo.trim()).length,
+        noVehicleType: drivers.filter((d) => d.isActive && !d.vehicleType.trim()).length,
+      },
+      series,
+      notifications: notifications.map((n) => ({
+        event: n.event,
+        channel: n.channel,
+        status: n.status,
+        count: n._count._all,
+      })),
+      recentErrors: recentErrors.map((f) => ({
+        channel: f.channel,
+        event: f.event,
+        error: f.error,
+        createdAt: f.createdAt,
+      })),
+    },
   });
 });
 
@@ -383,6 +628,9 @@ export const adminGetRide = asyncHandler(async (req, res) => {
       driver: DRIVER_PUBLIC,
       bids: { orderBy: { price: 'asc' }, include: { driver: DRIVER_PUBLIC } },
       events: { orderBy: { createdAt: 'asc' } },
+      // The delivery log is what separates "the customer ignored the bid" from
+      // "the customer was never told" — the two look identical without it.
+      notifications: { orderBy: { createdAt: 'asc' } },
     },
   });
   if (!ride) throw new ApiError(404, 'سفر نہیں ملا');
@@ -425,6 +673,13 @@ export const adminSetRideStatus = asyncHandler(async (req, res) => {
     });
     return tx.ride.findUnique({ where: { id: current.id }, include: { driver: DRIVER_PUBLIC } });
   });
+
+  // An admin closing a ride is as consequential to the assigned driver as the
+  // customer doing it, so it earns the same socket push and notification the
+  // customer-side cancel fires. Without these the driver keeps a dead ride on
+  // their screen until they next reload.
+  emitRide(req.app.get('io'), ride.status === 'cancelled' ? 'cancelled' : 'completed', ride);
+  if (ride.status === 'cancelled') notifyRideCancelled(ride);
 
   res.json({ success: true, data: serializeRideForAdmin(ride), message: 'اپ ڈیٹ ہو گیا' });
 });

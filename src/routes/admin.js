@@ -64,6 +64,8 @@ import {
   adminGetRide,
   adminListDrivers,
   adminListRides,
+  adminResetDriverPassword,
+  adminRideStats,
   adminSetDriverStatus,
   adminSetRideStatus,
   adminUpdateDriver,
@@ -98,7 +100,10 @@ router.get('/drivers', adminListDrivers);
 router.post('/drivers', validate(adminCreateDriverSchema), adminCreateDriver);
 router.put('/drivers/:id', validate(adminUpdateDriverSchema), adminUpdateDriver);
 router.patch('/drivers/:id/status', adminSetDriverStatus);
+router.patch('/drivers/:id/password', adminResetDriverPassword);
 router.get('/rides', adminListRides);
+// Static segment before `/:id`, or the param route treats "stats" as a ride id.
+router.get('/rides/stats', adminRideStats);
 router.get('/rides/:id', adminGetRide);
 router.patch('/rides/:id/status', adminSetRideStatus);
 

@@ -277,19 +277,25 @@ export function serializeRideEvent(e) {
 /// Admin sees everything except the two credentials.
 export function serializeRideForAdmin(r) {
   if (!r) return r;
-  const { id, deviceToken, accessToken, driver, bids, events, ...rest } = r;
+  const { id, deviceToken, accessToken, driver, bids, events, notifications, ...rest } = r;
   return {
     _id: id,
     ...rest,
     ...(driver !== undefined ? { driver: driverCard(driver, { includeContact: true }) } : {}),
     ...(bids !== undefined ? { bids: bids.map((b) => serializeBid(b, { includeContact: true })) } : {}),
     ...(events !== undefined ? { events: events.map(serializeRideEvent) } : {}),
+    // Mapped like every other relation rather than passed through raw, so the
+    // delivery log reaches the panel with the same `_id` shape as the rest.
+    ...(notifications !== undefined ? { notifications: notifications.map(withId) } : {}),
   };
 }
 
 export function serializeDriver(d) {
   if (!d) return d;
-  const { id, userId, user, ...rest } = d;
+  // `_count` is dropped rather than spread: callers that ask Prisma for related
+  // counts attach their own flattened fields, and passing the raw aggregate
+  // through would put a second, differently-shaped copy on the wire.
+  const { id, userId, user, _count, ...rest } = d;
   return {
     _id: id,
     ...rest,
