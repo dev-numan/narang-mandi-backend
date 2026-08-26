@@ -3,8 +3,12 @@
  *
  * The "register as a driver" banner has been filling `Registration` with names,
  * phones and vehicle numbers since launch. This walks the unprovisioned ones,
- * creates a `User{role:'driver'}` + `Driver` for each, and prints the Urdu
- * WhatsApp message to send them with their credentials.
+ * creates a `User{role:'driver'}` + `Driver` for each, and writes the Urdu
+ * WhatsApp welcome message plus a click-to-send wa.me link for each one.
+ *
+ * Mirrors the shopkeeper flow in `provision-pending-shops.js`: the operator
+ * opens the generated markdown and clicks one link per driver rather than
+ * copying credentials by hand into WhatsApp.
  *
  * Deliberately dry by default — pass `--apply` to write.
  *
@@ -21,19 +25,51 @@ import { normalizePhone } from '../utils/phone.js';
 const prisma = new PrismaClient();
 const APPLY = process.argv.includes('--apply');
 
-const PANEL_URL = `${process.env.PUBLIC_SITE_URL || 'https://www.narangmandi.com'}/driver`;
+const SITE_URL = process.env.PUBLIC_SITE_URL || 'https://www.narangmandi.com';
+const PANEL_URL = `${SITE_URL}/driver/login`;
+const APP_URL =
+  'https://play.google.com/store/apps/details?id=com.narangmandi&pcampaignid=web_share';
 
 const WELCOME_TEMPLATE = (email, password) => `السلام علیکم!
 
-نارنگ منڈی ٹیکسی میں آپ کا اکاؤنٹ بن گیا ہے۔
+نارنگ منڈی ٹیکسی سروس میں آپ کو خوش آمدید۔ آپ کا ڈرائیور اکاؤنٹ تیار ہو گیا ہے۔
 
-پینل: ${PANEL_URL}
-ای میل: ${email}
-پاس ورڈ: ${password}
+ای میل:
+${email}
 
-سواری کی درخواستیں پینل پر آئیں گی۔ اپنی قیمت بھیجیں — گاہک خود ڈرائیور منتخب کرے گا۔
+پاس ورڈ:
+${password}
 
+ڈرائیور پینل:
+${PANEL_URL}
+
+موبائل ایپ ڈاؤن لوڈ کریں:
+${APP_URL}
+
+ہدایات:
+
+1۔ اوپر دیئے گئے ڈرائیور پینل کے لنک پر کلک کریں۔
+2۔ اپنے ای میل اور پاس ورڈ کے ذریعے لاگ اِن کریں۔
+3۔ لاگ اِن کے بعد آپ کو نئی سواریوں کی درخواستیں نظر آئیں گی — سواری کہاں سے کہاں تک ہے اور کس وقت۔
+4۔ جو سواری آپ کو مناسب لگے، اس پر اپنا کرایہ بھیج دیں۔
+5۔ گاہک تمام کرایوں میں سے خود ڈرائیور منتخب کرے گا۔ آپ کا کرایہ منظور ہوتے ہی آپ کو اطلاع مل جائے گی اور گاہک کا نمبر آپ کو دکھائی دے گا۔
+6۔ گاہک سے رابطہ کر کے سواری مکمل کریں۔
+
+نوٹ: نئی سواری کی اطلاع فوراً پانے کے لیے ایپ کی نوٹیفیکیشن آن رکھیں۔
+
+مزید معلومات کے لیے اسی پیغام کا جواب دیں۔ ہماری ٹیم آپ کی مدد کے لیے حاضر ہے۔
+
+شکریہ!
 نارنگ منڈی ڈیجیٹل ہب`;
+
+/// wa.me wants E.164 without the +; drivers write their number as 03xxxxxxxxx.
+function waPhone(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('92')) return digits;
+  if (digits.startsWith('0')) return `92${digits.slice(1)}`;
+  return digits.length === 10 ? `92${digits}` : digits;
+}
 
 /// Ambiguity-free alphabet: no O/0, no l/1 — these get read down a phone line.
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
@@ -56,7 +92,7 @@ function asciiLocal(name, phone) {
 }
 
 async function nextEmail(base, used) {
-  const domain = 'driver.narangmandi.com';
+  const domain = 'narangdriver.com';
   for (let n = 0; n < 200; n++) {
     const candidate = `${base}${n ? n + 1 : ''}@${domain}`;
     if (used.has(candidate)) continue;
@@ -133,6 +169,7 @@ async function main() {
       });
     });
 
+    const whatsappMessage = WELCOME_TEMPLATE(email, password);
     created.push({
       name: lead.name,
       phone: dialable,
@@ -141,19 +178,44 @@ async function main() {
       vehicleNumber: lead.businessName || '',
       hasLicense: lead.hasLicense,
       panel: PANEL_URL,
-      whatsappMessage: WELCOME_TEMPLATE(email, password),
+      app: APP_URL,
+      whatsappMessage,
+      waLink: `https://wa.me/${waPhone(dialable)}?text=${encodeURIComponent(whatsappMessage)}`,
     });
 
     console.log(`\n--- ${lead.name} (${phone})`);
-    console.log(WELCOME_TEMPLATE(email, password));
+    console.log(whatsappMessage);
   }
 
   if (APPLY && created.length) {
     // Written outside server/ and client/ deliberately: the repo root is not a
     // git repository, so plaintext passwords cannot be committed by accident.
-    const out = path.resolve(process.cwd(), '..', 'driver-accounts.json');
+    const root = path.resolve(process.cwd(), '..');
+    const out = path.resolve(root, 'driver-accounts.json');
     fs.writeFileSync(out, JSON.stringify({ createdAt: new Date().toISOString(), drivers: created }, null, 2));
+
+    // A clickable list is the whole point: WhatsApp opens with the credentials
+    // and the guide already typed, so nobody re-keys a password by hand.
+    const waMd = path.resolve(root, 'whatsapp-links-drivers.md');
+    const lines = [
+      '# WhatsApp Welcome Links — New Drivers',
+      '',
+      `Generated: ${new Date().toISOString().slice(0, 10)}`,
+      `Total: ${created.length}`,
+      '',
+      'Click a link to open WhatsApp with the welcome message pre-filled (email + password included).',
+      '',
+      '---',
+      '',
+    ];
+    created.forEach((c, i) => {
+      lines.push(`${i + 1}. **${c.name}** (${c.phone}) — [${c.vehicleNumber || 'ڈرائیور'}](${c.waLink})`);
+    });
+    lines.push('');
+    fs.writeFileSync(waMd, lines.join('\n'), 'utf8');
+
     console.log(`\n${created.length} accounts written to ${out}`);
+    console.log(`WhatsApp links written to ${waMd}`);
   }
 
   await prisma.$disconnect();

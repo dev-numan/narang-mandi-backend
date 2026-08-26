@@ -21,12 +21,29 @@ import {
 /// billable messages otherwise, for information the socket already delivered.
 const BID_WHATSAPP_COOLDOWN_MS = 10 * 60 * 1000;
 
-async function activeDriverTokens() {
-  const rows = await prisma.deviceToken.findMany({
-    where: { user: { role: 'driver', driver: { isActive: true } } },
-    select: { token: true },
+/**
+ * Every active driver, paired with the tokens and the number that one driver
+ * should be reached on.
+ *
+ * Grouped per driver rather than flattened into one token list because a new
+ * ride now goes out on WhatsApp as well, and a template message needs its own
+ * recipient — a single broadcast dispatch carries only one `phone`.
+ */
+async function activeDriverRecipients() {
+  const drivers = await prisma.driver.findMany({
+    where: { isActive: true, user: { role: 'driver' } },
+    select: {
+      phone: true,
+      whatsapp: true,
+      user: { select: { deviceTokens: { select: { token: true } } } },
+    },
   });
-  return rows.map((r) => r.token);
+  return drivers.map((driver) => ({
+    tokens: driver.user.deviceTokens.map((t) => t.token),
+    // A driver's calling number is not always the one they use on WhatsApp, so
+    // the dedicated field wins wherever the admin recorded one.
+    phone: driver.whatsapp || driver.phone,
+  }));
 }
 
 async function driverTokens(driverId) {
@@ -39,18 +56,27 @@ async function driverTokens(driverId) {
 
 export async function notifyNewRide(ride) {
   try {
-    const tokens = await activeDriverTokens();
-    // phone: '' on purpose — the WhatsApp channel skips an unusable number, so
-    // the fan-out costs nothing there. Messaging every driver on WhatsApp would
-    // be both spam and billable.
-    await dispatch({
-      rideId: ride.id,
-      event: 'ride_new',
-      audience: 'driver',
-      message: newRideDriver(ride),
-      tokens,
-      phone: '',
-    });
+    const recipients = await activeDriverRecipients();
+    const message = newRideDriver(ride);
+
+    // One dispatch per driver, not one broadcast: WhatsApp addresses a single
+    // number at a time, so the fan-out has to happen here. This makes a posted
+    // ride cost one billable template message per active driver — the reason
+    // `newRideDriver` deliberately carries no customer name or number.
+    await Promise.allSettled(
+      recipients
+        .filter((r) => r.tokens.length || r.phone)
+        .map((recipient) =>
+          dispatch({
+            rideId: ride.id,
+            event: 'ride_new',
+            audience: 'driver',
+            message,
+            tokens: recipient.tokens,
+            phone: recipient.phone,
+          })
+        )
+    );
   } catch (err) {
     console.error('[notify] notifyNewRide failed', err.message);
   }
