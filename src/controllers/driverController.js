@@ -456,7 +456,7 @@ export const adminRideStats = asyncHandler(async (req, res) => {
   const windowStart = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
   const todayStart = pktTodayStart();
 
-  const [windowRides, windowBids, cancelSplit, drivers, reachable, notifications, openNow] =
+  const [windowRides, windowBids, cancelSplit, drivers, reachable, notifications, openNow, billable] =
     await Promise.all([
       prisma.ride.findMany({
         where: { createdAt: { gte: windowStart } },
@@ -483,6 +483,17 @@ export const adminRideStats = asyncHandler(async (req, res) => {
         _count: { _all: true },
       }),
       prisma.ride.count({ where: { status: 'open' } }),
+      // Every WhatsApp that Meta actually accepted, with who it went to and
+      // when. Billing is per recipient per 24h, not per message, so the rows
+      // have to be folded into conversations before they mean anything.
+      prisma.notificationLog.findMany({
+        where: {
+          channel: 'whatsapp',
+          createdAt: { gte: windowStart },
+          status: { in: ['sent', 'delivered', 'read', 'undelivered'] },
+        },
+        select: { target: true, createdAt: true, event: true, status: true },
+      }),
     ]);
 
   // The counts alone say a channel is failing; the provider's own message says
@@ -524,6 +535,25 @@ export const adminRideStats = asyncHandler(async (req, res) => {
   for (const b of windowBids) {
     const row = series[dayIndex[pktDay(b.createdAt)]];
     if (row) row.bids += 1;
+  }
+
+  // Meta bills one "conversation" per recipient per rolling 24h, not per
+  // message, so ten alerts to the same driver in a day cost the same as one.
+  // Folding by (recipient, day) is what turns the raw log into a bill estimate.
+  // Rates are hardcoded because Meta exposes message counts through the API but
+  // never prices — anything shown here is an estimate, not an invoice.
+  const RATE_USD = { utility: 0.006, marketing: 0.0132 };
+  const MARKETING_EVENTS = new Set(['ride_new', 'ride_bid', 'ride_cancelled']);
+  const conversations = new Set();
+  let marketingConvos = 0;
+  let utilityConvos = 0;
+  for (const row of billable) {
+    if (!row.target) continue;
+    const key = `${row.target}|${pktDay(row.createdAt)}|${MARKETING_EVENTS.has(row.event) ? 'm' : 'u'}`;
+    if (conversations.has(key)) continue;
+    conversations.add(key);
+    if (MARKETING_EVENTS.has(row.event)) marketingConvos += 1;
+    else utilityConvos += 1;
   }
 
   const prices = windowBids.map((b) => b.price).sort((a, b) => a - b);
@@ -583,6 +613,19 @@ export const adminRideStats = asyncHandler(async (req, res) => {
         status: n.status,
         count: n._count._all,
       })),
+      billing: {
+        messagesAccepted: billable.length,
+        conversations: marketingConvos + utilityConvos,
+        marketingConversations: marketingConvos,
+        utilityConversations: utilityConvos,
+        estimatedUsd:
+          Math.round((marketingConvos * RATE_USD.marketing + utilityConvos * RATE_USD.utility) * 1000) / 1000,
+        // Failures cost nothing: Meta rejects them before a conversation opens.
+        failedFree: notifications
+          .filter((n) => n.channel === 'whatsapp' && (n.status === 'failed' || n.status === 'skipped'))
+          .reduce((sum, n) => sum + n._count._all, 0),
+        rates: RATE_USD,
+      },
       recentErrors: recentErrors.map((f) => ({
         channel: f.channel,
         event: f.event,
