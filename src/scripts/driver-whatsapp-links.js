@@ -17,8 +17,9 @@ const prisma = new PrismaClient();
 
 const SITE_URL = process.env.PUBLIC_SITE_URL || 'https://www.narangmandi.com';
 const PANEL_URL = `${SITE_URL}/driver/login`;
+const GUIDE_URL = `${SITE_URL}/driver/guide`;
 const APP_URL =
-  'https://play.google.com/store/apps/details?id=com.narangmandi&pcampaignid=web_share';
+  'https://play.google.com/store/apps/details?id=com.narangmandi';
 
 const STEPS = `ہدایات:
 
@@ -29,7 +30,7 @@ const STEPS = `ہدایات:
 5۔ گاہک تمام کرایوں میں سے خود ڈرائیور منتخب کرے گا۔ آپ کا کرایہ منظور ہوتے ہی آپ کو اطلاع مل جائے گی اور گاہک کا نمبر آپ کو دکھائی دے گا۔
 6۔ گاہک سے رابطہ کر کے سواری مکمل کریں۔
 
-نوٹ: نئی سواری کی اطلاع فوراً پانے کے لیے ایپ کی نوٹیفیکیشن آن رکھیں۔
+نوٹ: نئی سواری کی اطلاع صرف ایپ پر آتی ہے۔ اس لیے ایپ ضرور انسٹال کریں اور نوٹیفیکیشن آن رکھیں۔
 
 مزید معلومات کے لیے اسی پیغام کا جواب دیں۔ ہماری ٹیم آپ کی مدد کے لیے حاضر ہے۔
 
@@ -52,6 +53,9 @@ ${PANEL_URL}
 موبائل ایپ ڈاؤن لوڈ کریں:
 ${APP_URL}
 
+تصویروں کے ساتھ مکمل گائیڈ:
+${GUIDE_URL}
+
 ${STEPS}`;
 
 /// No password: the hash cannot be reversed, so the driver is pointed at the
@@ -68,6 +72,9 @@ ${PANEL_URL}
 
 موبائل ایپ ڈاؤن لوڈ کریں:
 ${APP_URL}
+
+تصویروں کے ساتھ مکمل گائیڈ:
+${GUIDE_URL}
 
 ${STEPS}
 

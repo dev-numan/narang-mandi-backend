@@ -16,7 +16,10 @@ import { notifyNewRide, notifyRideAssigned, notifyRideCancelled } from '../lib/n
 
 /// How long a request stays biddable before it closes itself. Long enough for a
 /// driver to notice, short enough that yesterday's rides are not on the board.
-const RIDE_TTL_MS = 2 * 60 * 60 * 1000;
+/// Raised from two hours: most drivers are reached by WhatsApp rather than a
+/// push, so they read the request whenever they next pick up the phone, and a
+/// two-hour window was closing rides before anyone had looked at them.
+const RIDE_TTL_MS = 10 * 60 * 60 * 1000;
 
 /// How long drivers get the request to themselves before the customer is handed
 /// their numbers. Short enough that nobody waits around; long enough that a
