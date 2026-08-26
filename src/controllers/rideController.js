@@ -24,10 +24,12 @@ const RIDE_TTL_MS = 2 * 60 * 60 * 1000;
 /// down in the UI, so the head start is real and not decorative.
 export const BID_WINDOW_MS = 4 * 60 * 1000;
 
-/// A phone may hold this many open requests at once. Guests have no account to
-/// ban, so this is the only thing standing between one bored person and a board
-/// full of junk.
-const MAX_OPEN_PER_PHONE = 2;
+/// A phone may hold this many open requests at once. Set high enough that a
+/// real customer never meets it — someone booking a car and a rickshaw at the
+/// same time is normal — while still bounding what one person can do in a loop.
+/// Guests have no account to ban, and every posted ride now costs a billable
+/// WhatsApp message to each active driver, so the ceiling stays.
+const MAX_OPEN_PER_PHONE = 20;
 
 const generateRideCode = () => uniqueNumericCode(prisma.ride, 'rideCode');
 
