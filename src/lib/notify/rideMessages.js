@@ -1,12 +1,25 @@
 // Urdu copy for every ride notification, in one place, so push bodies and
 // WhatsApp template parameters cannot drift apart.
 
+/**
+ * The `_v2` names are the utility-category rewrites of three templates Meta
+ * reclassified to marketing on its own — `previous_category` on each of the
+ * originals still reads UTILITY. A marketing template is throttled under error
+ * 131049 ("to maintain healthy ecosystem engagement"), which silently withheld
+ * 25 of 31 driver alerts on one ride, and it is billed at roughly twice the
+ * utility rate. The rewrites say the same thing without the phrasing that
+ * triggered the reclassification — no "available!", no "open the app", no
+ * "keep watching for new rides".
+ *
+ * Parameter counts and order are identical to the originals, so the call sites
+ * below did not change.
+ */
 export const TEMPLATES = {
-  newRideDriver: 'nm_ride_new_driver',
-  bidReceivedCustomer: 'nm_ride_bid_received',
+  newRideDriver: 'nm_ride_new_driver_v2',
+  bidReceivedCustomer: 'nm_ride_bid_v2',
   assignedCustomer: 'nm_ride_assigned_customer',
   assignedDriver: 'nm_ride_assigned_driver',
-  cancelledDriver: 'nm_ride_cancelled',
+  cancelledDriver: 'nm_ride_cancelled_v2',
 };
 
 function money(amount) {
