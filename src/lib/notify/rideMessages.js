@@ -22,6 +22,23 @@ export const TEMPLATES = {
   cancelledDriver: 'nm_ride_cancelled_v2',
 };
 
+/**
+ * Appended by the SMS channel only.
+ *
+ * A text message arrives with no app icon and no thread history, so it has to
+ * say who sent it and which ride it is about. Push notifications get neither —
+ * the icon identifies the sender and the payload already carries `rideCode`.
+ */
+function smsFooter(rideCode) {
+  // A text cannot be tapped through to the app the way a push can, so it has to
+  // say what to do next. Measured: this stays within the same two Unicode
+  // segments the ride code alone already required, so it costs nothing to send.
+  const cta = 'ابھی ایپ کھولیں';
+  return rideCode
+    ? `${cta}\nسواری نمبر: ${rideCode}\nنارنگ منڈی ڈیجیٹل ہب`
+    : `${cta}\nنارنگ منڈی ڈیجیٹل ہب`;
+}
+
 function money(amount) {
   return `Rs ${Number(amount || 0).toLocaleString('en-US')}`;
 }
@@ -38,6 +55,7 @@ export function newRideDriver(ride) {
     template: TEMPLATES.newRideDriver,
     params: [ride.pickupText, ride.dropoffText, ride.whenText || 'ابھی'],
     data: { type: 'ride_new', rideId: ride.id },
+    smsFooter: smsFooter(ride.rideCode),
   };
 }
 
@@ -48,6 +66,7 @@ export function bidReceivedCustomer(ride, count) {
     template: TEMPLATES.bidReceivedCustomer,
     params: [ride.rideCode, String(count)],
     data: { type: 'ride_bid', rideId: ride.id, rideCode: ride.rideCode },
+    smsFooter: smsFooter(ride.rideCode),
   };
 }
 
@@ -58,6 +77,7 @@ export function assignedCustomer(ride, driverName) {
     template: TEMPLATES.assignedCustomer,
     params: [ride.rideCode, driverName, money(ride.agreedPrice)],
     data: { type: 'ride_assigned', rideId: ride.id, rideCode: ride.rideCode },
+    smsFooter: smsFooter(ride.rideCode),
   };
 }
 
@@ -68,6 +88,7 @@ export function assignedDriver(ride) {
     template: TEMPLATES.assignedDriver,
     params: [ride.pickupText, ride.dropoffText, money(ride.agreedPrice)],
     data: { type: 'ride_assigned', rideId: ride.id },
+    smsFooter: smsFooter(ride.rideCode),
   };
 }
 
@@ -85,6 +106,7 @@ export function bidRejectedDriver(ride) {
     body: `${ride.pickupText} سے ${ride.dropoffText}`,
     params: [ride.pickupText, ride.dropoffText],
     data: { type: 'ride_bid_rejected', rideId: ride.id },
+    smsFooter: smsFooter(ride.rideCode),
   };
 }
 
@@ -95,5 +117,6 @@ export function cancelledDriver(ride) {
     template: TEMPLATES.cancelledDriver,
     params: [ride.pickupText, ride.dropoffText],
     data: { type: 'ride_cancelled', rideId: ride.id },
+    smsFooter: smsFooter(ride.rideCode),
   };
 }

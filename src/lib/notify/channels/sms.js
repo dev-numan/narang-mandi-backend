@@ -54,7 +54,10 @@ export async function send({ phone, message }) {
   if (!to) return { status: 'skipped', error: `unusable phone: ${phone || '(empty)'}` };
 
   // Title and body are separate for a push notification; an SMS is one string.
-  const body = [message?.title, message?.body].filter(Boolean).join(' — ');
+  // The footer is SMS-only: a text arrives with no app icon and no thread, so it
+  // has to name the sender and the ride it refers to.
+  const headline = [message?.title, message?.body].filter(Boolean).join(' — ');
+  const body = [headline, message?.smsFooter].filter(Boolean).join('\n');
   if (!body) return { status: 'skipped', error: 'empty message' };
 
   let row;
