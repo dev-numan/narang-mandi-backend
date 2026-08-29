@@ -1,6 +1,7 @@
 import prisma from '../prisma.js';
 import * as fcm from './channels/fcm.js';
 import * as whatsapp from './channels/whatsapp.js';
+import * as sms from './channels/sms.js';
 
 const RETRY_DELAY_MS = 1_500;
 
@@ -74,6 +75,14 @@ export const REAL_CHANNELS = [
     target: ({ phone }) => phone || '',
     send: ({ message, phone }) =>
       whatsapp.send({ phone, template: message.template, params: message.params }),
+  },
+  {
+    name: 'sms',
+    isConfigured: sms.isConfigured,
+    target: ({ phone }) => phone || '',
+    // Queues rather than sends: the gateway phone collects it. `messageId` is
+    // the outbox row id, which a later status callback carries back.
+    send: ({ message, phone }) => sms.send({ phone, message }),
   },
 ];
 

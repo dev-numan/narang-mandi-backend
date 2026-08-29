@@ -20,6 +20,7 @@ import deviceRoutes from './routes/devices.js';
 import adminRoutes from './routes/admin.js';
 import contactRoutes from './routes/contact.js';
 import registrationRoutes from './routes/registrations.js';
+import smsGatewayRoutes from './routes/smsGateway.js';
 import sitemapRoutes from './routes/sitemap.js';
 import webhookRoutes from './routes/webhooks.js';
 import rideRoutes from './routes/rides.js';
@@ -78,6 +79,7 @@ export function createApp() {
   app.use('/api/admin', adminRoutes);
   app.use('/api/contact', contactRoutes);
   app.use('/api/registrations', registrationRoutes);
+  app.use('/api/sms-gateway', smsGatewayRoutes);
   app.use('/api/webhooks', webhookRoutes);
   app.use('/api/rides', rideRoutes);
   app.use('/api/driver', driverRoutes);

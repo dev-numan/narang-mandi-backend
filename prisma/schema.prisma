@@ -581,3 +581,34 @@ enum BidStatus {
   accepted
   rejected
 }
+
+/// Outgoing SMS, queued for the Android gateway phone to collect.
+///
+/// A durable queue rather than a direct send: the phone is not always reachable
+/// at the moment a ride is posted, so the row is written first and the phone
+/// fetches it whenever it next polls. `NotificationLog` cannot serve this — its
+/// rows are written *after* a send resolves, and carry no claim or retry state.
+model SmsOutbox {
+  id     String @id @default(cuid())
+  /// E.164 without the +, matching the WhatsApp channel's convention.
+  phone  String
+  body   String
+  /// "pending" | "claimed" | "sent" | "delivered" | "failed"
+  ///
+  /// "claimed" exists so two concurrent polls cannot hand the same message to
+  /// the phone twice; the row is claimed in the same transaction that reads it.
+  status String @default("pending")
+  /// Bounded so a permanently undeliverable number cannot be retried forever.
+  attempts  Int       @default(0)
+  claimedAt DateTime?
+  sentAt    DateTime?
+  error     String?
+  /// The NotificationLog row this message belongs to, so a status callback can
+  /// update both. Null for anything sent outside the notification pipeline.
+  logId     String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  /// The gateway polls by status, oldest first.
+  @@index([status, createdAt])
+}

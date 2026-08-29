@@ -178,3 +178,84 @@ test('dispatch resolves even when every channel and the log writer fail', async 
   // The whole point: a buyer who received an order number keeps it regardless.
   await dispatch(JOB);
 });
+
+/* ------------------------------------------------------------- sms gateway */
+
+test('toSmsNumber accepts the same forms as WhatsApp and rejects landlines', async () => {
+  const { toSmsNumber } = await import('./channels/sms.js');
+  assert.equal(toSmsNumber('03001234567'), '923001234567');
+  assert.equal(toSmsNumber('+92 300 1234567'), '923001234567');
+  assert.equal(toSmsNumber('923001234567'), '923001234567');
+  // A landline is not textable; skipping here beats a failure at the handset.
+  assert.equal(toSmsNumber('0421234567'), null);
+  assert.equal(toSmsNumber(''), null);
+  assert.equal(toSmsNumber(null), null);
+});
+
+test('a queued SMS is logged with the outbox id, so a status callback can find it', async () => {
+  const logs = [];
+  // Stands in for the outbox write: what matters here is that the dispatcher
+  // records whatever id the channel returns.
+  const dispatch = createDispatch({
+    channels: [
+      {
+        name: 'sms',
+        isConfigured: () => true,
+        target: ({ phone }) => phone || '',
+        send: async () => ({ status: 'sent', messageId: 'outbox_abc123' }),
+      },
+    ],
+    writeLog: async (row) => logs.push(row),
+    delayMs: 0,
+  });
+
+  await dispatch({
+    rideId: 'r1',
+    event: 'ride_new',
+    audience: 'driver',
+    message: { title: 'نئی سواری', body: 'نارنگ سے مریدکے' },
+    phone: '03001234567',
+  });
+
+  assert.equal(logs.length, 1);
+  assert.equal(logs[0].channel, 'sms');
+  assert.equal(logs[0].status, 'sent');
+  assert.equal(logs[0].providerMessageId, 'outbox_abc123');
+});
+
+test('an unconfigured gateway is skipped and never breaks the other channels', async () => {
+  const logs = [];
+  const dispatch = createDispatch({
+    channels: [
+      {
+        name: 'fcm',
+        isConfigured: () => true,
+        target: () => '1 device',
+        send: async () => ({ status: 'sent' }),
+      },
+      {
+        name: 'sms',
+        isConfigured: () => false,
+        target: ({ phone }) => phone || '',
+        send: async () => {
+          throw new Error('must not be called when unconfigured');
+        },
+      },
+    ],
+    writeLog: async (row) => logs.push(row),
+    delayMs: 0,
+  });
+
+  await dispatch({
+    rideId: 'r1',
+    event: 'ride_new',
+    audience: 'driver',
+    message: { title: 'نئی سواری', body: 'نارنگ سے مریدکے' },
+    phone: '03001234567',
+  });
+
+  const bySms = logs.find((l) => l.channel === 'sms');
+  const byFcm = logs.find((l) => l.channel === 'fcm');
+  assert.equal(bySms.status, 'skipped');
+  assert.equal(byFcm.status, 'sent', 'push must still go out when SMS is off');
+});
