@@ -72,8 +72,12 @@ export const listOpenRides = asyncHandler(async (req, res) => {
   await sweepExpiredRides();
   const driver = await getDriver(req);
 
+  // `expiresAt` as well as the status: the sweep above only runs when someone
+  // hits an endpoint, so between requests an expired ride is still `open` in
+  // the table. Filtering on the clock keeps yesterday's rides off the board
+  // even when nothing has swept them yet.
   const rides = await prisma.ride.findMany({
-    where: { status: 'open' },
+    where: { status: 'open', expiresAt: { gt: new Date() } },
     orderBy: { createdAt: 'desc' },
     take: 50,
     include: { bids: { where: { driverId: driver.id }, take: 1 } },
